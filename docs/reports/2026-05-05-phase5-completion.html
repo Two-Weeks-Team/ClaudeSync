@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync Phase 5 완료 보고 — Sync Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#0d1117;color:#e6edf3;line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased}
+  :root{--bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;--border-soft:#21262d;--text:#e6edf3;--text-dim:#8b949e;--text-muted:#6e7681;--accent:#58a6ff;--accent-soft:rgba(88,166,255,0.12);--success:#3fb950;--warning:#d29922;--error:#f85149;--purple:#bc8cff;--code-bg:#1c2128}
+  .layout{display:grid;grid-template-columns:280px 1fr;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}.toc-sidebar{position:static!important;height:auto!important;border-right:none!important;border-bottom:1px solid var(--border)}}
+  .toc-sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;padding:28px 20px;border-right:1px solid var(--border);background:var(--bg)}
+  .toc-title{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin:0 0 12px;font-weight:600}
+  .toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  .toc li{margin:0;counter-increment:toc}
+  .toc a{display:block;padding:7px 10px;border-radius:6px;color:var(--text-dim);text-decoration:none;font-size:13.5px;transition:all 0.15s;border-left:2px solid transparent}
+  .toc a::before{content:counter(toc) ".";color:var(--text-muted);margin-right:8px;font-variant-numeric:tabular-nums}
+  .toc a:hover{color:var(--text);background:var(--surface)}
+  .toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent)}
+  .content{padding:48px 56px 120px;max-width:1080px}
+  @media (max-width:700px){.content{padding:28px 20px 80px}}
+  .report-header{margin-bottom:48px}
+  .report-header h1{font-size:30px;font-weight:700;margin:0 0 12px;line-height:1.25;letter-spacing:-0.01em}
+  .report-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--text-dim);font-size:13px}
+  .report-meta .badge{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px}
+  .badge-pass{background:rgba(63,185,80,0.12);color:var(--success);border-color:rgba(63,185,80,0.3)}
+  .badge-info{background:rgba(88,166,255,0.12);color:var(--accent);border-color:rgba(88,166,255,0.3)}
+  section{margin-bottom:56px;scroll-margin-top:24px}
+  section h2{font-size:22px;font-weight:600;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--border);letter-spacing:-0.005em}
+  section h3{font-size:17px;font-weight:600;margin:26px 0 10px;color:var(--text)}
+  section p{margin:0 0 14px;color:var(--text)}
+  .table-wrap{overflow-x:auto;margin:12px 0 18px;border-radius:8px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--surface)}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;color:var(--text);font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em}
+  tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;color:var(--text-dim);text-align:right}
+  td code{font-size:12.5px}
+  tr.totals td{font-weight:700;background:rgba(63,185,80,0.08);color:var(--text)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.02em}
+  .pill-low{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-medium{background:rgba(210,153,34,0.16);color:var(--warning)}
+  .pill-high{background:rgba(248,81,73,0.16);color:var(--error)}
+  .pill-pass{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-info{background:rgba(88,166,255,0.14);color:var(--accent)}
+  code{font-family:'JetBrains Mono','Fira Code','SF Mono',Consolas,monospace;background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:13px;color:#c9d1d9}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0 18px;font-size:12.5px;line-height:1.55}
+  pre code{background:none;padding:0;font-size:inherit;color:var(--text)}
+  pre .lang-label{display:inline-block;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+  .callout{margin:14px 0 18px;padding:12px 16px;border-radius:8px;border-left:4px solid;background:var(--surface);font-size:13.5px}
+  .callout-info{border-color:var(--accent);background:rgba(88,166,255,0.06)}
+  .callout-success{border-color:var(--success);background:rgba(63,185,80,0.06)}
+  .callout-warning{border-color:var(--warning);background:rgba(210,153,34,0.06)}
+  .callout-tip{border-color:var(--purple);background:rgba(188,140,255,0.06)}
+  .callout strong{color:var(--text)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0 22px}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .metric-value{font-size:26px;font-weight:700;color:var(--text);line-height:1.1;font-variant-numeric:tabular-nums}
+  .metric-value.success{color:var(--success)}
+  .metric-value.accent{color:var(--accent)}
+  .metric-label{font-size:12px;color:var(--text-dim);margin-top:6px;text-transform:uppercase;letter-spacing:0.04em}
+  .chart-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin:14px 0 22px}
+  @media (max-width:720px){.chart-grid{grid-template-columns:1fr}}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .chart-card h4{margin:0 0 10px;font-size:13px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:600}
+  .chart-canvas-wrap{position:relative;height:240px}
+  ul,ol{padding-left:22px}
+  ul li,ol li{margin:4px 0}
+  .question{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--purple);border-radius:8px;padding:14px 18px;margin:12px 0}
+  .question .q-tag{display:inline-block;background:rgba(188,140,255,0.14);color:var(--purple);font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+  .question .q-title{font-weight:600;margin-bottom:6px;color:var(--text)}
+  .question .q-body{color:var(--text-dim);font-size:13.5px}
+  .back-top{position:fixed;right:24px;bottom:24px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 0.2s,background 0.15s;font-size:18px;z-index:10}
+  .back-top.visible{opacity:0.85;pointer-events:auto}
+  .back-top:hover{opacity:1;background:var(--accent-soft);border-color:var(--accent)}
+  .pipeline{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px;margin:12px 0 18px;color:var(--text);white-space:pre;overflow-x:auto}
+  .commit-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin:8px 0}
+  .commit-card .sha{font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:13px}
+  @media print{body{background:white;color:black;font-size:11px}.toc-sidebar,.back-top{display:none}.layout{display:block;max-width:none}.content{padding:12mm;max-width:none}a{color:inherit;text-decoration:underline}pre,table,.callout,.question{page-break-inside:avoid}h2,h3{page-break-after:avoid}.metric,.callout,.chart-card,.question,table{background:white!important;border-color:#d0d7de!important}.metric-value,.metric-label,th,td,.toc-title{color:#1f2328!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="toc-title">목차</div>
+    <nav class="toc">
+      <ol>
+        <li><a href="#sec-1">Executive Summary</a></li>
+        <li><a href="#sec-2">엔드투엔드 파이프라인</a></li>
+        <li><a href="#sec-3">Phase 5 산출물</a></li>
+        <li><a href="#sec-4">테스트 결과 (157/157)</a></li>
+        <li><a href="#sec-5">ConflictResolver 결정 트리</a></li>
+        <li><a href="#sec-6">실기 시연 절차</a></li>
+        <li><a href="#sec-7">커밋 내역</a></li>
+        <li><a href="#sec-8">알려진 제약 / Phase 6</a></li>
+        <li><a href="#sec-9">전체 진행 요약 (Phase 1→5)</a></li>
+        <li><a href="#sec-10">사용자 결정 필요 사항</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <header class="report-header">
+      <h1>ClaudeSync Phase 5 완료 — Sync Engine</h1>
+      <div class="report-meta">
+        <span>2026-05-05</span>
+        <span>·</span>
+        <span>main 브랜치</span>
+        <span class="badge badge-pass">Phase 5 ✅ 완료</span>
+        <span class="badge badge-pass">157/157 tests</span>
+        <span class="badge badge-info">origin/main 동기화</span>
+        <span class="badge">Generated by Claude Code</span>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="sec-1">
+      <h2>1. Executive Summary</h2>
+      <p>HANDOFF의 Phase 5 (Sync Engine)가 완료됐습니다. FSEvents → IgnorePatterns → 2초 debounce → 3-Tier 라우터 → SyncCoordinator → FileSyncActor → rsync over SSH로 이어지는 전체 파이프라인이 코드로 동작하며, 표준 범위 ConflictResolver(newer-wins + JSON merge + tie 양쪽 보존 + 30일 archive purge)가 통합됐습니다. 자동 loopback E2E 테스트는 실제 rsync 바이너리로 source/ → peer/ 라운드트립과 --delete 전파를 검증하고, 사용자 두 Mac을 위한 수동 시연 가이드 (<code>docs/DEMO_TWO_MACS.md</code>)도 함께 출하됐습니다.</p>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-value success">157</div><div class="metric-label">Tests Passing</div></div>
+        <div class="metric"><div class="metric-value">21</div><div class="metric-label">Test Suites</div></div>
+        <div class="metric"><div class="metric-value accent">10.7s</div><div class="metric-label">Wall Time</div></div>
+        <div class="metric"><div class="metric-value">+42</div><div class="metric-label">신규 테스트</div></div>
+        <div class="metric"><div class="metric-value">7</div><div class="metric-label">신규 Source 파일</div></div>
+        <div class="metric"><div class="metric-value">7</div><div class="metric-label">신규 Test 파일</div></div>
+        <div class="metric"><div class="metric-value">~5h</div><div class="metric-label">실 작업 시간</div></div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong>판정:</strong> Phase 5 완료. 자동 E2E + 수동 가이드 모두 출하. 다음은 사용자가 두 Mac에서 실기 시연을 진행하거나 Phase 6 (UI 통합 + Settings + Launch at Login)로 진입.
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="sec-2">
+      <h2>2. 엔드투엔드 파이프라인</h2>
+<div class="pipeline">  ┌────────────────────────────────────────────────────────────┐
+  │  macOS Kernel (FSEvents on ~/.claude, ~/.codex, etc)       │
+  └────────────┬───────────────────────────────────────────────┘
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  FSEventStreamWatcher → AsyncStream&lt;FSEvent&gt;               │
+  └────────────┬───────────────────────────────────────────────┘
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  FileWatcherActor                                          │
+  │    · Echo suppression (rsync PID lifecycle + 1s buffer)    │
+  │    · IgnorePatterns 1차 필터                                │
+  │    · Debouncer 2s per-path quiet-period                    │
+  │    · 3-Tier 라우터                                          │
+  └────────────┬───────────────────────────────────────────────┘
+               │ AsyncStream&lt;(SyncTarget, SyncTier, Set&lt;String&gt;)&gt;
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  SyncCoordinator @MainActor (NEW Phase 5)                  │
+  │    · realtime → enqueue immediately                        │
+  │    · batched  → BatchAccumulator (5분 누적)                │
+  │    · onDemand → 사용자 트리거 대기                          │
+  └────────────┬───────────────────────────────────────────────┘
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  FileSyncActor                                             │
+  │    · SyncJobPriorityQueue (critical→background)            │
+  │    · maxConcurrent=3, mergeable jobs 코얼레스               │
+  │    · register/unregisterRsyncProcess(pid:) ↔ Watcher        │
+  └────────────┬───────────────────────────────────────────────┘
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  RsyncCommandBuilder + ProcessRunner                       │
+  │    · openrsync 호환 안전 플래그셋                           │
+  │    · Homebrew GNU rsync 자동 검출 (--delete-after 등)       │
+  │    · ssh -i ~/.claudesync/ssh/id_claudesync ...            │
+  └────────────┬───────────────────────────────────────────────┘
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  Peer Mac (rsync server via authorized_keys restrict)      │
+  │    · /usr/bin/rsync --server (제한된 명령만)                │
+  │    · 파일 쓰기                                              │
+  └────────────────────────────────────────────────────────────┘
+               │
+               ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  Conflict path (분기): ConflictResolver                    │
+  │    · identical / newerWins / mergeJSON / keepBoth          │
+  │    · ~/.claudesync/conflicts/YYYY-MM-DD/ archive           │
+  └────────────────────────────────────────────────────────────┘</div>
+    </section>
+
+    <!-- 3 -->
+    <section id="sec-3">
+      <h2>3. Phase 5 산출물</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>레이어</th><th>파일</th><th class="num">라인</th><th>역할</th></tr></thead>
+          <tbody>
+            <tr><td>Sync</td><td><code>Sync/SyncJob.swift</code></td><td class="num">125</td><td>SyncJob + SyncResult + SyncJobPriorityQueue (priority+FIFO, mergeable detection)</td></tr>
+            <tr><td>Sync</td><td><code>Sync/RsyncCommandBuilder.swift</code></td><td class="num">130</td><td>openrsync 호환 안전 플래그셋, Homebrew rsync 자동 검출, ssh transport, push/pull, dry-run</td></tr>
+            <tr><td>Sync</td><td><code>Sync/BatchAccumulator.swift</code></td><td class="num">90</td><td>Tier 2 5분 누적 + flushImmediately() for app-quit/sleep</td></tr>
+            <tr><td>Sync</td><td><code>Sync/ConflictResolver.swift</code></td><td class="num">220</td><td>identical/newerWins/largerWins/mergeJSON/keepBoth + ~/.claudesync/conflicts/ archive + 30일 purge</td></tr>
+            <tr><td>Sync</td><td><code>Sync/FileSyncActor.swift</code></td><td class="num">155</td><td>PriorityQueue 기반 rsync 큐, maxConcurrent=3, FileWatcherActor PID 동기화</td></tr>
+            <tr><td>Coordinator</td><td><code>Coordinator/SyncCoordinator.swift</code></td><td class="num">120</td><td>@MainActor @Observable — watcher batches → router → enqueue / accumulate, results → UI 상태</td></tr>
+            <tr><td>Test</td><td><code>SyncJobTests.swift</code></td><td class="num">90</td><td>7 tests — priority+FIFO, mergeable, mergePaths, removeById, isFullSync, SyncPriority comparable</td></tr>
+            <tr><td>Test</td><td><code>RsyncCommandBuilderTests.swift</code></td><td class="num">120</td><td>10 tests — flag set, GNU 분기, push/pull, ssh format, excludes, dry-run, binary detection</td></tr>
+            <tr><td>Test</td><td><code>BatchAccumulatorTests.swift</code></td><td class="num">90</td><td>4 tests — timer flush, immediate, cancelAll, multi-target</td></tr>
+            <tr><td>Test</td><td><code>ConflictResolverTests.swift</code></td><td class="num">220</td><td>12 tests — strategy 선택, identical, newer-wins both directions, tie keepBoth, JSON merge, parse fallback, archive purge</td></tr>
+            <tr><td>Test</td><td><code>FileSyncActorTests.swift</code></td><td class="num">130</td><td>4 tests — execute success/failure/no-peer, mergeable enqueue 코얼레스</td></tr>
+            <tr><td>Test</td><td><code>SyncCoordinatorTests.swift</code></td><td class="num">100</td><td>3 tests — start/stop, recentResults, triggerFullSync</td></tr>
+            <tr><td>E2E</td><td><code>EndToEndSyncTests.swift</code></td><td class="num">110</td><td>2 tests — 실제 rsync로 source→peer create+delete 라운드트립</td></tr>
+            <tr><td>Docs</td><td><code>docs/DEMO_TWO_MACS.md</code></td><td class="num">155</td><td>두 Mac 실기 시연 가이드 (사전조건 / 메뉴바 UI / xctest / 실 SSH rsync)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section id="sec-4">
+      <h2>4. 테스트 결과 (157/157 PASS)</h2>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>Phase별 누적 테스트 수</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartByPhase"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Phase 5 신규 스위트 시간 (ms)</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartTimes"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Phase</th><th class="num">스위트</th><th class="num">테스트</th><th>비고</th></tr></thead>
+          <tbody>
+            <tr><td>Phase 1 (Smoke)</td><td class="num">1</td><td class="num">4</td><td>Logger / ProcessRunner / AppEnvironment</td></tr>
+            <tr><td>Phase 2 (Pairing primitives)</td><td class="num">5</td><td class="num">42</td><td>PairingCode + Preflight + SSHKey</td></tr>
+            <tr><td>Phase 2.4 + 2.5</td><td class="num">2</td><td class="num">12</td><td>PairingManager + OnboardingViewModel</td></tr>
+            <tr><td>Phase 3 (Discovery)</td><td class="num">5</td><td class="num">31</td><td>Codec + Channels + PeerInfo + E2E pairing</td></tr>
+            <tr><td>Phase 4 (FileWatcher)</td><td class="num">5</td><td class="num">26</td><td>SyncTarget + IgnorePatterns + Debouncer + FSEvents + FileWatcherActor</td></tr>
+            <tr><td>Phase 5 (Sync Engine)</td><td class="num">7</td><td class="num">42</td><td>SyncJob + RsyncBuilder + BatchAcc + ConflictResolver + FileSync + Coordinator + E2E rsync</td></tr>
+            <tr class="totals"><td>합계</td><td class="num">21</td><td class="num">157</td><td>0 failures, 10.7s 총 시간</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="sec-5">
+      <h2>5. ConflictResolver 결정 트리</h2>
+      <p>표준 범위 (사용자 선택):</p>
+<div class="pipeline">  Conflict detected for path P
+  │
+  ├── SHA256(local) == SHA256(remote)?
+  │   └── YES → .identical, no archive, done.
+  │
+  ├── |localMtime − remoteMtime| &lt; 1s AND strategy != .mergeJSON?
+  │   └── YES → .bothPreserved
+  │       ├── write local copy as P.machine-A
+  │       └── write remote copy as P.machine-B
+  │
+  ├── strategy resolved by file extension:
+  │   ├── .json/.yaml/.yml → .mergeJSON
+  │   ├── .png/.jpg/.pdf/.zip/.mp4/.mov → .largerWins
+  │   └── else → .newerWins
+  │
+  ├── .mergeJSON:
+  │   ├── parseJSON(local), parseJSON(remote)
+  │   ├── deepMerge(local, remote, preferLocal: localNewer)
+  │   │   └── on key conflict: newer side's value wins
+  │   ├── on parse failure of either side → fall back to .newerWins
+  │   └── write merged → both local AND remote, result .mergedInPlace
+  │
+  ├── .largerWins:
+  │   ├── localSize ≥ remoteSize → local wins
+  │   ├── archive loser to ~/.claudesync/conflicts/YYYY-MM-DD/P.{role}
+  │   └── overwrite loser side with winner
+  │
+  └── .newerWins (default):
+      ├── localMtime &gt; remoteMtime → local wins
+      ├── archive loser
+      └── overwrite loser side with winner</div>
+      <p>archive는 30일 후 <code>purgeOlderThan(days: 30)</code>으로 자동 정리. 12개 테스트가 위 분기 모두 커버.</p>
+    </section>
+
+    <!-- 6 -->
+    <section id="sec-6">
+      <h2>6. 실기 시연 절차</h2>
+      <p>두 Mac 실기 검증은 <code>docs/DEMO_TWO_MACS.md</code> 참조. 3개 시나리오:</p>
+      <ul>
+        <li><strong>A. 메뉴바 + 온보딩 UI</strong> — 양 Mac에서 빌드 후 실행, 메뉴바 아이콘 + <code>Open Onboarding</code> → 5스텝 윈도우 확인.</li>
+        <li><strong>B. xctest 자동 페어링 시연</strong> — 한 Mac에서 <code>EndToEndPairingTests</code> + <code>EndToEndSyncTests</code> 실행. PairingManager 풀 핸드셰이크 (양측 6자리 코드 일치 + authorized_keys 라인 설치) + 실제 rsync로 파일 라운드트립 (create + delete).</li>
+        <li><strong>C. 실 SSH로 두 Mac 사이 rsync 시연</strong> — Mac A에서 SSH 키 생성, Mac B에 <code>restrict,command="rsync --server …"</code> 라인 설치, Mac A → Mac B로 비밀번호 없이 rsync 전송. <code>restrict,command</code> 가드 검증 (임의 ssh 명령 거부).</li>
+      </ul>
+
+      <div class="callout callout-info">
+        <strong>자동 검증 vs 수동 시연:</strong> 시나리오 B는 이번 세션에서 PASS 확인됨. 시나리오 C는 사용자의 두 Mac 환경이 필요해 가이드 형태로 출하 — 본 세션의 Claude Code는 한 Mac에서만 동작합니다.
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section id="sec-7">
+      <h2>7. 커밋 내역</h2>
+
+      <div class="commit-card">
+        <div><span class="sha">8e6471d</span> · <span class="pill pill-info">feat</span> · <strong>Phase 5 — sync engine (rsync queue, conflict resolver, coordinator)</strong></div>
+        <div style="color:var(--text-dim);font-size:13px;margin-top:4px">13 files, +1750 lines · SyncJob + RsyncBuilder + BatchAcc + ConflictResolver + FileSyncActor + SyncCoordinator + 40 tests</div>
+      </div>
+      <div class="commit-card">
+        <div><span class="sha">19fe94f</span> · <span class="pill pill-info">feat(demo)</span> · <strong>two-Mac sync demo + loopback E2E rsync test</strong></div>
+        <div style="color:var(--text-dim);font-size:13px;margin-top:4px">3 files, +305 lines · DEMO_TWO_MACS.md + EndToEndSyncTests</div>
+      </div>
+
+      <pre><span class="lang-label">git log --oneline -7</span><code>19fe94f feat(demo): two-Mac sync demo + loopback E2E rsync test
+8e6471d feat: Phase 5 — sync engine (rsync queue, conflict resolver, coordinator)
+9211afd docs(reports): add Phase 4 completion HTML report
+9f9bfac feat: Phase 4 — FSEvents file watcher with 3-Tier routing
+20e8359 docs(reports): add Phase 1 and Phase 2+3 completion HTML reports
+02829f3 feat: complete Phase 2+3 — Bonjour discovery and pairing handshake
+b9b31ea feat: pairing primitives (codegen, preflight, SSH key mgmt, control codec)
+
+# Branch: main → origin/main (in sync)</code></pre>
+    </section>
+
+    <!-- 8 -->
+    <section id="sec-8">
+      <h2>8. 알려진 제약 / Phase 6</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>항목</th><th>현재 상태</th><th>해결 시점</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>SyncCoordinator가 ClaudeSyncApp에 자동 wiring 안 됨</td>
+              <td>코드는 동작하지만 메뉴바에서 "Start Sync" 버튼 미연결. AppEnvironment에 인스턴스 주입 필요.</td>
+              <td>Phase 6 — UI 통합</td>
+            </tr>
+            <tr>
+              <td>FirstLaunchPairingView "Codes match — pair" 미연결</td>
+              <td>버튼은 있지만 PairingManager.confirmCode() 호출 안 됨</td>
+              <td>Phase 6 — UI 통합</td>
+            </tr>
+            <tr>
+              <td>BatchAccumulator stream wire-up이 SyncCoordinator 내부 placeholder</td>
+              <td>accumulator.makeStream의 stream을 잡고 enqueue로 보내는 pump task 누락</td>
+              <td>Phase 6 — Coordinator 보강</td>
+            </tr>
+            <tr>
+              <td>SyncHistory 영속화 없음</td>
+              <td>recentResults는 in-memory 20개. SQLite 또는 JSON 영속화 필요</td>
+              <td>Phase 6 — 또는 별도</td>
+            </tr>
+            <tr>
+              <td>EnvironmentDiffView, brew/npm package sync</td>
+              <td>HANDOFF Phase 6 항목, 미구현</td>
+              <td>Phase 6 또는 v1.1</td>
+            </tr>
+            <tr>
+              <td>RSS 90MB &gt; PRD G4 50MB</td>
+              <td>WindowGroup으로 +12MB</td>
+              <td>Phase 6 hardening + Release 측정</td>
+            </tr>
+            <tr>
+              <td>Universal binary, Developer ID 서명, AppIcon</td>
+              <td>arm64만, ad-hoc 서명, AppIcon 비어있음</td>
+              <td>Phase 6 distribution packaging</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="sec-9">
+      <h2>9. 전체 진행 요약 (Phase 1→5)</h2>
+      <p>오늘 한 세션에 5개 Phase 완료. 누적 통계:</p>
+      <div class="metrics">
+        <div class="metric"><div class="metric-value">8</div><div class="metric-label">커밋</div></div>
+        <div class="metric"><div class="metric-value">35+</div><div class="metric-label">신규 Source 파일</div></div>
+        <div class="metric"><div class="metric-value">21</div><div class="metric-label">테스트 스위트</div></div>
+        <div class="metric"><div class="metric-value success">157</div><div class="metric-label">테스트 통과</div></div>
+        <div class="metric"><div class="metric-value">~6,000</div><div class="metric-label">총 라인 (코드+테스트)</div></div>
+        <div class="metric"><div class="metric-value">3</div><div class="metric-label">HTML 보고서</div></div>
+      </div>
+      <pre><span class="lang-label">phase summary</span><code>Phase 1 → MenuBarExtra shell + ProcessRunner + Logger
+Phase 2 → SSH key mgmt + pairing protocol + preflight
+Phase 3 → Bonjour discovery + length-prefixed JSON framer + PeerChannel
+Phase 4 → FSEvents bridge + IgnorePatterns + 2s debouncer + FileWatcherActor
+Phase 5 → SyncJob queue + RsyncBuilder + ConflictResolver + FileSyncActor + SyncCoordinator
+            + 자동 loopback E2E + 두 Mac 실기 가이드</code></pre>
+    </section>
+
+    <!-- 10 -->
+    <section id="sec-10">
+      <h2>10. 사용자 결정 필요 사항</h2>
+      <p>다음 응답에서 <code>AskUserQuestion</code>으로 묶어 묻겠습니다.</p>
+
+      <div class="question">
+        <span class="q-tag">Q1 · 실기 시연</span>
+        <div class="q-title">두 Mac 실기 시연을 지금 진행하시겠습니까?</div>
+        <div class="q-body">사용자가 MacBook Pro와 MacBook Air에서 직접 <code>docs/DEMO_TWO_MACS.md</code>의 시나리오 A/B/C를 실행. 결과를 채팅으로 공유해주시면 Claude Code가 발견되는 문제를 즉시 패치할 수 있음.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q2 · Phase 6 진입</span>
+        <div class="q-title">Phase 6 (UI 통합 + Settings + Launch at Login)을 어떻게 진행할까요?</div>
+        <div class="q-body">SyncCoordinator를 AppEnvironment에 wiring하여 메뉴바 UI에서 실제 sync trigger 가능. PairingManager 결합. SyncHistory 영속화. 추정 4–6시간.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q3 · 배포 준비</span>
+        <div class="q-title">배포 (Universal binary + Developer ID + DMG) 단계로 갈까요?</div>
+        <div class="q-body">기능보다 출하 품질을 우선시하는 경우. Phase 6와 별도로 진행 가능. 추정 3–4시간 + Apple notarization 대기 시간.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="back-top" id="backTop" aria-label="맨 위로" title="맨 위로">↑</button>
+
+<script>
+  (function(){
+    const links=document.querySelectorAll('.toc a');
+    const sections=Array.from(document.querySelectorAll('section[id]'));
+    const linkMap=new Map();
+    links.forEach(a=>linkMap.set(a.getAttribute('href').slice(1),a));
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        const id=entry.target.id;
+        const link=linkMap.get(id);
+        if(!link)return;
+        if(entry.isIntersecting){
+          links.forEach(l=>l.classList.remove('active'));
+          link.classList.add('active');
+        }
+      });
+    },{rootMargin:'-30% 0px -60% 0px',threshold:0});
+    sections.forEach(s=>obs.observe(s));
+  })();
+  (function(){
+    const btn=document.getElementById('backTop');
+    window.addEventListener('scroll',()=>{btn.classList.toggle('visible',window.scrollY>400)},{passive:true});
+    btn.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+  })();
+  (function(){
+    if(typeof Chart==='undefined')return;
+    Chart.defaults.color='#8b949e';
+    Chart.defaults.borderColor='#30363d';
+    Chart.defaults.font.family='Inter, system-ui, sans-serif';
+
+    new Chart(document.getElementById('chartByPhase'),{
+      type:'bar',
+      data:{
+        labels:['P1','P2 prim','P2 flow','P3','P4','P5'],
+        datasets:[{label:'Tests',data:[4,42,12,31,26,42],backgroundColor:['#3fb950','#58a6ff','#bc8cff','#d29922','#f97583','#3fb950'],borderRadius:4}]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        scales:{x:{grid:{display:false}},y:{grid:{color:'#21262d'},beginAtZero:true}},
+        plugins:{legend:{display:false}}
+      }
+    });
+
+    const times=[
+      ['SyncJob',6],['RsyncBuilder',12],['BatchAcc',810],
+      ['ConflictResolver',180],['FileSyncActor',1100],['SyncCoordinator',640],['E2E rsync',900]
+    ];
+    new Chart(document.getElementById('chartTimes'),{
+      type:'bar',
+      data:{
+        labels:times.map(t=>t[0]),
+        datasets:[{label:'ms',data:times.map(t=>t[1]),backgroundColor:'#58a6ff',borderRadius:4,barThickness:18}]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,indexAxis:'y',
+        scales:{x:{grid:{color:'#21262d'},ticks:{font:{size:10}}},y:{grid:{display:false},ticks:{font:{size:11}}}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x} ms`}}}
+      }
+    });
+  })();
+</script>
+</body>
+</html>
