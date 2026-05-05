@@ -17,7 +17,7 @@ public actor FileSyncActor {
         }
     }
 
-    public let config: Configuration
+    public private(set) var config: Configuration
     public let watcher: FileWatcherActor?
     public private(set) var peer: RsyncCommandBuilder.PeerEndpoint?
 
@@ -25,6 +25,13 @@ public actor FileSyncActor {
     /// "no peer" state (jobs will fail with "no peer configured").
     public func setPeer(_ newPeer: RsyncCommandBuilder.PeerEndpoint?) {
         self.peer = newPeer
+    }
+
+    /// Swap the rsync command builder at runtime. Used by Settings to apply
+    /// updated bandwidth/exclude preferences without restarting the engine.
+    public func setBuilder(_ newBuilder: RsyncCommandBuilder) {
+        self.config = Configuration(maxConcurrent: config.maxConcurrent,
+                                    builder: newBuilder)
     }
 
     private var queue = SyncJobPriorityQueue()

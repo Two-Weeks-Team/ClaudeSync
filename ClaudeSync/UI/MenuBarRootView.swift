@@ -175,19 +175,33 @@ struct MenuBarRootView: View {
 
     private var footer: some View {
         HStack {
-            Button("Open Onboarding") {
+            Button("Onboarding") {
                 openWindow(id: "onboarding")
                 NSApp.activate(ignoringOtherApps: true)
             }
             .buttonStyle(.bordered)
+            Button("Settings…") {
+                openSettings()
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut(",", modifiers: [.command])
             Spacer()
-            Button("Quit ClaudeSync") {
+            Button("Quit") {
                 Task {
                     await environment.shutdownSyncEngine()
                     NSApp.terminate(nil)
                 }
             }
             .keyboardShortcut("q", modifiers: [.command])
+        }
+    }
+
+    private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } else {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
     }
 }

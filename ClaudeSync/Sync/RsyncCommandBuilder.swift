@@ -20,15 +20,24 @@ public struct RsyncCommandBuilder: Sendable {
     public let rsyncPath: String
     public let isGNURsync: Bool
     public let sshKeyPath: String
+    /// Maximum bandwidth in KiB/s. `0` means unlimited.
+    public let bandwidthLimitKBps: Int
+    /// User-supplied additional excludes per target, merged with the spec
+    /// defaults and `IgnorePatterns.security`.
+    public let userExtraExcludes: [SyncTarget: [String]]
 
     public init(
         rsyncPath: String? = nil,
-        sshKeyPath: String? = nil
+        sshKeyPath: String? = nil,
+        bandwidthLimitKBps: Int = 0,
+        userExtraExcludes: [SyncTarget: [String]] = [:]
     ) {
         let detected = rsyncPath ?? Self.detectRsyncBinary()
         self.rsyncPath = detected
         self.isGNURsync = detected.contains("homebrew") || detected.contains("/opt/homebrew/")
         self.sshKeyPath = sshKeyPath ?? Self.defaultSSHKeyPath()
+        self.bandwidthLimitKBps = max(0, bandwidthLimitKBps)
+        self.userExtraExcludes = userExtraExcludes
     }
 
     /// Default `~/.claudesync/ssh/id_claudesync` path. Pulled into a static so
@@ -69,8 +78,17 @@ public struct RsyncCommandBuilder: Sendable {
             args += ["--contimeout=10"]
         }
 
+        // User-tunable bandwidth cap (rsync 3 + openrsync both honor --bwlimit).
+        if bandwidthLimitKBps > 0 {
+            args += ["--bwlimit=\(bandwidthLimitKBps)"]
+        }
+
         // Per-target excludes.
         for pattern in job.target.spec.excludePatterns {
+            args += ["--exclude", pattern]
+        }
+        // User-supplied extras for this target.
+        for pattern in userExtraExcludes[job.target] ?? [] {
             args += ["--exclude", pattern]
         }
         // Always-enforced security excludes.

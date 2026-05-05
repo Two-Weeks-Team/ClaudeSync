@@ -99,4 +99,50 @@ final class RsyncCommandBuilderTests: XCTestCase {
         let detected = RsyncCommandBuilder.detectRsyncBinary()
         XCTAssertTrue(detected == "/opt/homebrew/bin/rsync" || detected == "/usr/bin/rsync")
     }
+
+    func testBandwidthLimit_emitsBwlimitArg_whenPositive() {
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/rsync",
+                                          sshKeyPath: "/tmp/key",
+                                          bandwidthLimitKBps: 2048)
+        let job = SyncJob(target: .codexConfig, direction: .push)
+        let args = builder.build(job: job, peer: peer)
+        XCTAssertTrue(args.contains("--bwlimit=2048"),
+                      "expected --bwlimit=2048, got: \(args)")
+    }
+
+    func testBandwidthLimit_omitsBwlimitArg_whenZero() {
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/rsync",
+                                          sshKeyPath: "/tmp/key",
+                                          bandwidthLimitKBps: 0)
+        let job = SyncJob(target: .codexConfig, direction: .push)
+        let args = builder.build(job: job, peer: peer)
+        XCTAssertFalse(args.contains(where: { $0.hasPrefix("--bwlimit") }))
+    }
+
+    func testUserExtraExcludes_areEmittedForMatchingTarget() {
+        let extras: [SyncTarget: [String]] = [.projects: ["secret-notes/", "*.draft"]]
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/rsync",
+                                          sshKeyPath: "/tmp/key",
+                                          userExtraExcludes: extras)
+        let job = SyncJob(target: .projects, direction: .push)
+        let args = builder.build(job: job, peer: peer)
+        let emittedExcludes = zip(args, args.dropFirst()).compactMap { (a, b) -> String? in
+            a == "--exclude" ? b : nil
+        }
+        XCTAssertTrue(emittedExcludes.contains("secret-notes/"))
+        XCTAssertTrue(emittedExcludes.contains("*.draft"))
+    }
+
+    func testUserExtraExcludes_doNotLeakIntoOtherTargets() {
+        let extras: [SyncTarget: [String]] = [.projects: ["only-projects-pattern"]]
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/rsync",
+                                          sshKeyPath: "/tmp/key",
+                                          userExtraExcludes: extras)
+        let job = SyncJob(target: .codexConfig, direction: .push)
+        let args = builder.build(job: job, peer: peer)
+        let emittedExcludes = zip(args, args.dropFirst()).compactMap { (a, b) -> String? in
+            a == "--exclude" ? b : nil
+        }
+        XCTAssertFalse(emittedExcludes.contains("only-projects-pattern"))
+    }
 }

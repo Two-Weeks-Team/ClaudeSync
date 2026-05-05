@@ -21,5 +21,10 @@ struct ClaudeSyncApp: App {
             Label("ClaudeSync", systemImage: environment.overallStatus.systemImageName)
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+                .environment(environment)
+        }
     }
 }

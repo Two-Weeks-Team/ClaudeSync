@@ -19,6 +19,8 @@ final class AppEnvironment {
     let coordinator: SyncCoordinator
     let sshKeys: SSHKeyManager
     let discovery: PeerDiscoveryActor
+    let preferences: PreferencesStore
+    let launchAtLogin: LaunchAtLoginController
 
     // MARK: - Published UI state
 
@@ -34,6 +36,11 @@ final class AppEnvironment {
     var activePairingState: PairingManager.State = .idle
     var activePairedPeer: PairingManager.PairedPeer?
 
+    /// Snapshot of current preferences kept on the main actor for SwiftUI
+    /// binding. Always written through `applyPreferences(_:)` so the
+    /// PreferencesStore + RsyncCommandBuilder + LaunchAtLogin stay in sync.
+    var currentPreferences: Preferences = .default
+
     private var discoveryTask: Task<Void, Never>?
     private var activePairing: PairingManager?
     private var activePairingTask: Task<Void, Never>?
@@ -44,9 +51,15 @@ final class AppEnvironment {
         homeDirectory: URL = URL(fileURLWithPath: NSHomeDirectory())
     ) {
         self.logger = logger
+        let prefsStore = PreferencesStore()
+        let initialPrefs = Preferences.loadInitialSync(from: PreferencesStore.defaultURL)
         let watcherCfg = FileWatcherActor.Configuration(homeDirectory: homeDirectory)
         let watcher = FileWatcherActor(config: watcherCfg)
-        let builder = RsyncCommandBuilder()
+        let extras = AppEnvironment.userExcludesByTarget(initialPrefs)
+        let builder = RsyncCommandBuilder(
+            bandwidthLimitKBps: initialPrefs.bandwidthLimitKBps,
+            userExtraExcludes: extras
+        )
         let syncActor = FileSyncActor(
             config: .init(builder: builder),
             watcher: watcher,
@@ -74,6 +87,9 @@ final class AppEnvironment {
             sshPort: 22
         )
         self.discovery = PeerDiscoveryActor(identity: identity)
+        self.preferences = prefsStore
+        self.launchAtLogin = LaunchAtLoginController(logger: logger)
+        self.currentPreferences = initialPrefs
 
         logger.info("AppEnvironment initialized", category: "app")
 
@@ -229,6 +245,40 @@ final class AppEnvironment {
         if let ch = activeChannel { await ch.close() }
         activeChannel = nil
         activePairing = nil
+    }
+
+    // MARK: - Preferences
+
+    /// Apply a new preferences snapshot: persist it, push the bandwidth/exclude
+    /// changes into the FileSyncActor, and reconcile the Launch-at-Login state
+    /// with macOS ServiceManagement. Failures are logged, never thrown — UI
+    /// surfaces the post-apply state via `currentPreferences`.
+    func applyPreferences(_ next: Preferences) async {
+        do {
+            try await preferences.replace(next)
+        } catch {
+            logger.warning("Preferences persist failed: \(error)",
+                           category: "preferences")
+        }
+        let extras = AppEnvironment.userExcludesByTarget(next)
+        let newBuilder = RsyncCommandBuilder(
+            bandwidthLimitKBps: next.bandwidthLimitKBps,
+            userExtraExcludes: extras
+        )
+        await syncActor.setBuilder(newBuilder)
+        if launchAtLogin.isEnabled != next.launchAtLogin {
+            _ = launchAtLogin.setEnabled(next.launchAtLogin)
+        }
+        currentPreferences = next
+    }
+
+    private static func userExcludesByTarget(_ prefs: Preferences) -> [SyncTarget: [String]] {
+        var dict: [SyncTarget: [String]] = [:]
+        for target in SyncTarget.allCases {
+            let extras = prefs.extraExcludes(for: target)
+            if !extras.isEmpty { dict[target] = extras }
+        }
+        return dict
     }
 
     func shutdownSyncEngine() async {
