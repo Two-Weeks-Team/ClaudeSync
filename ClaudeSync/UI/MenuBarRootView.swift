@@ -81,9 +81,16 @@ struct MenuBarRootView: View {
                         Text("\(peer.hostname) (\(peer.username))")
                             .font(.caption)
                         Spacer()
-                        if !peer.isPaired {
-                            Text("Pair from Onboarding")
-                                .font(.caption2).foregroundStyle(.tertiary)
+                        if environment.activePairedPeer?.machineId == peer.machineId {
+                            Label("Paired", systemImage: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.green)
+                        } else {
+                            Button("Pair") {
+                                Task { try? await environment.initiatePairing(with: peer) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                         }
                     }
                 }

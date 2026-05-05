@@ -26,11 +26,18 @@ final class AppEnvironment {
     var needsOnboarding: Bool = true
     var isAutoStarted: Bool = false
     /// Peers currently visible on the local network (Bonjour-discovered, not
-    /// necessarily paired). Phase 6.5 placeholder — full pairing flow will
-    /// drive this once it lands.
+    /// necessarily paired).
     var discoveredPeers: [PeerInfo] = []
 
+    /// Currently in-flight pairing, if any. Surface this to the UI so the
+    /// onboarding window can prompt the user.
+    var activePairingState: PairingManager.State = .idle
+    var activePairedPeer: PairingManager.PairedPeer?
+
     private var discoveryTask: Task<Void, Never>?
+    private var activePairing: PairingManager?
+    private var activePairingTask: Task<Void, Never>?
+    private var activeChannel: NWConnectionPeerChannel?
 
     init(
         logger: AppLogger = .shared,
@@ -122,11 +129,106 @@ final class AppEnvironment {
                     }
                 case .peerDisappeared(let mid):
                     self.discoveredPeers.removeAll { $0.machineId == mid }
-                case .incomingConnection, .browserStateChanged, .listenerStateChanged:
+                case .incomingConnection(let channel, _):
+                    // Responder side: the peer is initiating pairing with us.
+                    await self.acceptIncomingPairing(channel: channel as! NWConnectionPeerChannel)
+                case .browserStateChanged, .listenerStateChanged:
                     break
                 }
             }
         }
+    }
+
+    // MARK: - Pairing
+
+    /// Initiator entry point — user clicked "Pair with X" in the onboarding UI.
+    func initiatePairing(with peer: PeerInfo) async throws {
+        guard activePairing == nil else { return }
+        let channel = try await discovery.connect(to: peer) as! NWConnectionPeerChannel
+        let manager = makePairingManager(channel: channel)
+        await beginPairingObservation(manager: manager)
+        try await manager.initiate()
+    }
+
+    /// Responder entry point — an inbound NWConnection arrived from a peer.
+    private func acceptIncomingPairing(channel: NWConnectionPeerChannel) async {
+        guard activePairing == nil else {
+            // We're already mid-pairing; refuse this one cleanly.
+            await channel.close()
+            return
+        }
+        let manager = makePairingManager(channel: channel)
+        await beginPairingObservation(manager: manager)
+        // Start listening so incoming pairRequest is processed.
+        try? await manager.start()
+    }
+
+    /// User accepted the pending pairRequest in the UI.
+    func acceptPendingPairing() async {
+        guard let manager = activePairing else { return }
+        try? await manager.acceptPendingRequest()
+    }
+
+    /// User confirmed the displayed code matches.
+    func confirmPairingCode() async {
+        guard let manager = activePairing else { return }
+        try? await manager.confirmCode()
+    }
+
+    /// User rejected at any step.
+    func rejectActivePairing(reason: String = "user-cancelled") async {
+        guard let manager = activePairing else { return }
+        try? await manager.reject(reason: reason)
+    }
+
+    private func makePairingManager(channel: NWConnectionPeerChannel) -> PairingManager {
+        let identity = PairingManager.LocalIdentity(
+            machineId: AppEnvironment.persistentMachineId(),
+            hostname: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
+            username: NSUserName(), sshPort: 22
+        )
+        let manager = PairingManager(channel: channel, sshKeys: sshKeys, identity: identity)
+        activePairing = manager
+        activeChannel = channel
+        return manager
+    }
+
+    private func beginPairingObservation(manager: PairingManager) async {
+        let stream = await manager.events()
+        activePairingTask = Task { @MainActor [weak self] in
+            for await event in stream {
+                guard let self else { break }
+                if case .stateChanged(let newState) = event {
+                    self.activePairingState = newState
+                    if case .completed(let paired) = newState {
+                        await self.handlePairingCompleted(paired)
+                    }
+                    if case .rejected = newState { await self.tearDownActivePairing() }
+                    if case .failed = newState   { await self.tearDownActivePairing() }
+                }
+            }
+        }
+    }
+
+    private func handlePairingCompleted(_ paired: PairingManager.PairedPeer) async {
+        activePairedPeer = paired
+        // Wire the just-paired peer into the FileSyncActor so future jobs
+        // actually go over SSH instead of failing with "no peer configured".
+        let endpoint = RsyncCommandBuilder.PeerEndpoint(
+            sshAddress: "\(paired.username)@\(paired.hostname).local",
+            sshPort: paired.sshPort
+        )
+        await syncActor.setPeer(endpoint)
+        overallStatus = .connected
+        logger.info("Paired with \(paired.hostname) — sync engine peer wired", category: "pairing")
+    }
+
+    private func tearDownActivePairing() async {
+        activePairingTask?.cancel()
+        activePairingTask = nil
+        if let ch = activeChannel { await ch.close() }
+        activeChannel = nil
+        activePairing = nil
     }
 
     func shutdownSyncEngine() async {
