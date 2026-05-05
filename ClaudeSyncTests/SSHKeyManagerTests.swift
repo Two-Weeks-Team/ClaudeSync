@@ -109,13 +109,23 @@ final class SSHKeyManagerTests: XCTestCase {
 
         let auth = await manager.authorizedKeysURL
         let contents = try String(contentsOf: auth, encoding: .utf8)
-        XCTAssertTrue(contents.contains("restrict,command="))
-        XCTAssertTrue(contents.contains("--server"))
+        XCTAssertTrue(contents.contains("restrict,command="),
+                      "Installed entry must carry the rsync-only restriction")
+        // v1.0.1 (SEC-001): authorized_keys now points at our wrapper script
+        // instead of in-shell ${SSH_ORIGINAL_COMMAND} expansion.
+        let wrapperPath = await manager.rsyncWrapperURL.path
+        XCTAssertTrue(contents.contains(wrapperPath),
+                      "Installed entry must invoke the rsync-server-wrapper")
         XCTAssertTrue(contents.contains("claudesync@PeerMac"))
 
         let attrs = try FileManager.default.attributesOfItem(atPath: auth.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
         XCTAssertEqual(perms, 0o600)
+
+        // Wrapper itself must exist and be executable-only-by-owner.
+        let wAttrs = try FileManager.default.attributesOfItem(atPath: wrapperPath)
+        let wPerms = (wAttrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        XCTAssertEqual(wPerms, 0o700)
     }
 
     func testInstallPeerKey_thenRemove_roundtripsCleanly() async throws {

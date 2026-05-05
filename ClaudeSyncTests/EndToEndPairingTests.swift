@@ -88,13 +88,15 @@ final class EndToEndPairingTests: XCTestCase {
 
         XCTAssertTrue(authA.contains("claudesync@MacBookAir"),
             "Mac A's authorized_keys must contain Mac B's key")
-        XCTAssertTrue(authA.contains("restrict,command=") && authA.contains("--server"),
-            "Installed entry must carry the rsync-only restriction")
+        let wrapperA = await keysA.rsyncWrapperURL.path
+        XCTAssertTrue(authA.contains("restrict,command=") && authA.contains(wrapperA),
+            "Installed entry must carry the rsync-only restriction (wrapper path)")
 
         XCTAssertTrue(authB.contains("claudesync@MacBookPro"),
             "Mac B's authorized_keys must contain Mac A's key")
-        XCTAssertTrue(authB.contains("restrict,command=") && authB.contains("--server"),
-            "Installed entry must carry the rsync-only restriction")
+        let wrapperB = await keysB.rsyncWrapperURL.path
+        XCTAssertTrue(authB.contains("restrict,command=") && authB.contains(wrapperB),
+            "Installed entry must carry the rsync-only restriction (wrapper path)")
 
         // ── 10. PairedPeer records are mutually consistent ──────────────
         guard case .completed(let peerOnA) = await macA.state,
