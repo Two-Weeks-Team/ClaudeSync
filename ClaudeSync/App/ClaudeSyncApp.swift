@@ -2,7 +2,17 @@ import SwiftUI
 
 @main
 struct ClaudeSyncApp: App {
-    @State private var environment = AppEnvironment()
+    @State private var environment: AppEnvironment
+
+    init() {
+        // v1.1: refuse to start a second instance — see SingleInstanceGuard
+        // for the failure modes (Bonjour port collision, doubled FSEvents).
+        // Must run BEFORE AppEnvironment is constructed since the env init
+        // already starts Bonjour advertising.
+        SingleInstanceGuard.enforce()
+        _environment = State(initialValue: AppEnvironment())
+    }
+
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {

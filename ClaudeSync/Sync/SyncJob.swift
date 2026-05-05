@@ -128,6 +128,13 @@ public struct SyncJobPriorityQueue: Sendable {
 
     public func snapshot() -> [SyncJob] { jobs }
 
+    /// v1.1: drop every queued job. Used by FileSyncActor when the user
+    /// un-pairs so we don't keep a backlog that would emit confusing
+    /// failures the next time a peer is configured.
+    public mutating func removeAll() {
+        jobs.removeAll()
+    }
+
     /// `lhs` outranks `rhs` if it has a strictly higher priority (lower raw),
     /// or the same priority but an earlier createdAt.
     static func outranks(_ lhs: SyncJob, _ rhs: SyncJob) -> Bool {

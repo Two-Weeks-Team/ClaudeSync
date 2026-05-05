@@ -66,32 +66,43 @@ final class FileSyncActorTests: XCTestCase {
         XCTAssertTrue(reason.contains("exit=1"))
     }
 
-    func testNoPeer_emitsFailureWithoutInvokingRsync() async throws {
+    func testNoPeer_dropsJobSilently_v1_1() async throws {
+        // v1.1 UX fix: when peer is nil (e.g. pre-pairing or after Forget),
+        // jobs are dropped instead of cycling through the queue and emitting
+        // "no peer configured" failures into the user's Recent Activity.
         let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
                                           sshKeyPath: "/tmp/key")
         let actor = FileSyncActor(
             config: .init(maxConcurrent: 1, builder: builder),
             peer: nil  // <-- no peer
         )
-        let stream = actor.results()
-        let consumer = Task<[SyncResult], Never> {
-            var out: [SyncResult] = []
-            for await r in stream {
-                out.append(r)
-                if out.count >= 1 { break }
-            }
-            return out
-        }
-
         await actor.enqueue(SyncJob(target: .codexConfig, direction: .push))
-        try await Task.sleep(for: .milliseconds(200))
+        try await Task.sleep(for: .milliseconds(50))
+        let pending = await actor.pendingCount
+        let running = await actor.runningCount
+        XCTAssertEqual(pending, 0, "no peer ⇒ enqueue must drop, not queue")
+        XCTAssertEqual(running, 0, "no peer ⇒ no rsync invocation")
         await actor.close()
+    }
 
-        let results = await consumer.value
-        guard case .failure(let reason) = results.first?.status else {
-            return XCTFail()
-        }
-        XCTAssertTrue(reason.contains("no peer"))
+    func testSetPeerNil_drainsPendingQueue_v1_1() async throws {
+        // v1.1: un-pair (setPeer(nil)) clears anything still queued so the
+        // moment a new peer is wired we don't run stale work meant for the
+        // previous peer.
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder),
+            peer: .init(sshAddress: "x@y.local")
+        )
+        await actor.enqueue(SyncJob(target: .codexConfig, direction: .push))
+        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push))
+        let beforePending = await actor.pendingCount
+        XCTAssertEqual(beforePending, 2)
+
+        await actor.setPeer(nil)
+        let afterPending = await actor.pendingCount
+        XCTAssertEqual(afterPending, 0, "setPeer(nil) must drain the queue")
     }
 
     func testEnqueue_mergesMatchingTargetDirectionJobs() async throws {

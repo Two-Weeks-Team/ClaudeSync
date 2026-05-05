@@ -21,6 +21,9 @@ final class AppEnvironment {
     let discovery: PeerDiscoveryActor
     let preferences: PreferencesStore
     let launchAtLogin: LaunchAtLoginController
+    /// v1.1 (SEC-002): owns the local TLS identity used for the Bonjour
+    /// control channel.
+    let tlsProvider: TLSCertificateProvider
 
     /// Onboarding state machine — bound to the FirstLaunchPairingView.
     /// v1.0.1 (RCA-C1): closures wired so the view's Accept/Confirm/Reject
@@ -53,6 +56,12 @@ final class AppEnvironment {
     private var activePairing: PairingManager?
     private var activePairingTask: Task<Void, Never>?
     private var activeChannel: PeerChannel?
+    /// v1.1 (RCA-M5/M6/M7): observes Wi-Fi flaps + sleep/wake and triggers
+    /// discovery restart with a small backoff so we don't thrash sshd or
+    /// mDNSResponder.
+    private var resilienceMonitor: NetworkResilienceMonitor?
+    private var lastDiscoveryRestart: Date = .distantPast
+    private static let discoveryRestartCooldown: TimeInterval = 3
 
     init(
         logger: AppLogger = .shared,
@@ -65,7 +74,8 @@ final class AppEnvironment {
         let extras = AppEnvironment.userExcludesByTarget(initialPrefs)
         let builder = RsyncCommandBuilder(
             bandwidthLimitKBps: initialPrefs.bandwidthLimitKBps,
-            userExtraExcludes: extras
+            userExtraExcludes: extras,
+            knownHostsPath: AppEnvironment.knownHostsPathIfPopulated(homeDirectory: homeDirectory)
         )
         let syncActor = FileSyncActor(
             config: .init(builder: builder),
@@ -93,7 +103,15 @@ final class AppEnvironment {
             username: NSUserName(),
             sshPort: 22
         )
-        self.discovery = PeerDiscoveryActor(identity: identity)
+        let tlsProvider = TLSCertificateProvider(homeDirectory: homeDirectory,
+                                                 logger: logger)
+        self.tlsProvider = tlsProvider
+        self.discovery = PeerDiscoveryActor(
+            identity: identity,
+            tlsOptionsFactory: { pin in
+                try await tlsProvider.makeOptions(pinnedFingerprint: pin)
+            }
+        )
         self.preferences = PreferencesStore()
         self.launchAtLogin = LaunchAtLoginController(logger: logger)
         self.currentPreferences = initialPrefs
@@ -205,15 +223,18 @@ final class AppEnvironment {
                         category: "pairing")
         }
 
-        do {
-            try await discovery.startAdvertising()
-            logger.info("Bonjour advertising started", category: "discovery")
-            try await discovery.startBrowsing()
-            logger.info("Bonjour browsing started", category: "discovery")
-            if overallStatus == .idle { overallStatus = .discovering }
-        } catch {
-            logger.warning("discovery setup failed: \(error)", category: "discovery")
-            if overallStatus == .idle { overallStatus = .error("discovery failed") }
+        await startBonjour()
+
+        // v1.1: arm the network/sleep-wake monitor so we self-heal on
+        // Wi-Fi flap or after the laptop wakes from sleep.
+        if resilienceMonitor == nil {
+            resilienceMonitor = NetworkResilienceMonitor(logger: logger) { [weak self] event in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
+                    await self?.handleResilienceEvent(event)
+                }
+            }
+            resilienceMonitor?.start()
         }
 
         // Pump discovery events into our published peer list. We never
@@ -238,9 +259,63 @@ final class AppEnvironment {
                     await self.acceptIncomingPairing(channel: channel)
                 case .browserStateChanged, .listenerStateChanged:
                     break
+                case .listenerFailed(let reason):
+                    self.logger.warning("listener failed: \(reason) — restarting",
+                                        category: "discovery")
+                    await self.restartDiscoveryWithCooldown()
+                case .browserFailed(let reason):
+                    self.logger.warning("browser failed: \(reason) — restarting",
+                                        category: "discovery")
+                    await self.restartDiscoveryWithCooldown()
                 }
             }
         }
+    }
+
+    private func startBonjour() async {
+        do {
+            try await discovery.startAdvertising()
+            logger.info("Bonjour advertising started", category: "discovery")
+            try await discovery.startBrowsing()
+            logger.info("Bonjour browsing started", category: "discovery")
+            if overallStatus == .idle { overallStatus = .discovering }
+        } catch {
+            logger.warning("discovery setup failed: \(error)", category: "discovery")
+            if overallStatus == .idle { overallStatus = .error("discovery failed") }
+        }
+    }
+
+    /// v1.1 (RCA-M5/M6/M7): respond to network/sleep events. We *always*
+    /// debounce restarts behind a short cooldown to avoid hammering
+    /// mDNSResponder on a flapping network.
+    private func handleResilienceEvent(_ event: NetworkResilienceMonitor.Event) async {
+        switch event {
+        case .networkLost, .systemWillSleep:
+            // Fast path: stop browsing/listening so we don't sit in a
+            // half-broken state while the OS is reconfiguring.
+            await discovery.stopBrowsing()
+            await discovery.stopAdvertising()
+            discoveredPeers.removeAll()
+            if overallStatus != .idle { overallStatus = .discovering }
+        case .networkRecovered, .systemDidWake:
+            await restartDiscoveryWithCooldown()
+        }
+    }
+
+    private func restartDiscoveryWithCooldown() async {
+        let now = Date()
+        if now.timeIntervalSince(lastDiscoveryRestart) < Self.discoveryRestartCooldown {
+            return
+        }
+        lastDiscoveryRestart = now
+        logger.info("restarting Bonjour after network/wake event",
+                    category: "resilience")
+        await discovery.stopBrowsing()
+        await discovery.stopAdvertising()
+        // Small breath so mDNSResponder finishes processing the cancel
+        // before we re-register.
+        try? await Task.sleep(for: .milliseconds(500))
+        await startBonjour()
     }
 
     // MARK: - Pairing
@@ -353,8 +428,36 @@ final class AppEnvironment {
             return
         }
 
+        // v1.1 (SEC-005): if the peer shipped its SSH host key in
+        // PairAcceptPayload, register it in our private known_hosts so
+        // rsync's ssh transport stops relying on `accept-new` TOFU.
+        if !paired.sshHostPublicKey.isEmpty {
+            do {
+                try await sshKeys.registerKnownHost(
+                    hostname: paired.hostname,
+                    hostKey: paired.sshHostPublicKey
+                )
+                logger.info("Registered known_hosts entry for \(paired.hostname)",
+                            category: "pairing")
+            } catch {
+                logger.warning("known_hosts registration failed: \(error)",
+                               category: "pairing")
+            }
+        }
+
         activePairedPeer = paired
         await wirePairedPeerEndpoint(paired)
+        // v1.1 (SEC-005): rebuild the rsync command builder so the next
+        // sync uses the freshly-populated known_hosts under strict mode.
+        let extras = AppEnvironment.userExcludesByTarget(currentPreferences)
+        let refreshed = RsyncCommandBuilder(
+            bandwidthLimitKBps: currentPreferences.bandwidthLimitKBps,
+            userExtraExcludes: extras,
+            knownHostsPath: AppEnvironment.knownHostsPathIfPopulated(
+                homeDirectory: URL(fileURLWithPath: NSHomeDirectory())
+            )
+        )
+        await syncActor.setBuilder(refreshed)
         // RCA-C3: persist so the next launch reuses this peer without prompting.
         let record = PairedPeerRecord(
             machineId: paired.machineId,
@@ -419,13 +522,28 @@ final class AppEnvironment {
         let extras = AppEnvironment.userExcludesByTarget(next)
         let newBuilder = RsyncCommandBuilder(
             bandwidthLimitKBps: next.bandwidthLimitKBps,
-            userExtraExcludes: extras
+            userExtraExcludes: extras,
+            knownHostsPath: AppEnvironment.knownHostsPathIfPopulated(
+                homeDirectory: URL(fileURLWithPath: NSHomeDirectory())
+            )
         )
         await syncActor.setBuilder(newBuilder)
         if launchAtLogin.isEnabled != next.launchAtLogin {
             _ = launchAtLogin.setEnabled(next.launchAtLogin)
         }
         currentPreferences = next
+    }
+
+    /// Returns the path to ~/.claudesync/ssh/known_hosts if it exists with
+    /// at least one entry, otherwise empty string. Empty triggers the
+    /// `accept-new` TOFU fallback (needed for the very first pairing
+    /// before known_hosts has been populated).
+    nonisolated private static func knownHostsPathIfPopulated(homeDirectory: URL) -> String {
+        let url = homeDirectory.appendingPathComponent(".claudesync/ssh/known_hosts")
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int, size > 0
+        else { return "" }
+        return url.path
     }
 
     private static func userExcludesByTarget(_ prefs: Preferences) -> [SyncTarget: [String]] {
@@ -439,6 +557,8 @@ final class AppEnvironment {
 
     func shutdownSyncEngine() async {
         guard isAutoStarted else { return }
+        resilienceMonitor?.stop()
+        resilienceMonitor = nil
         discoveryTask?.cancel()
         discoveryTask = nil
         await discovery.stopBrowsing()
@@ -447,6 +567,10 @@ final class AppEnvironment {
         isAutoStarted = false
         overallStatus = .idle
         discoveredPeers.removeAll()
+        // v1.1: clean shutdown releases the single-instance sentinel so a
+        // subsequent launch within the same second isn't tripped by a
+        // stale PID.
+        SingleInstanceGuard.releaseSentinel()
     }
 
     enum OverallStatus: Equatable {

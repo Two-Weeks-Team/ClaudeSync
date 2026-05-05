@@ -22,9 +22,15 @@ public actor FileSyncActor {
     public private(set) var peer: RsyncCommandBuilder.PeerEndpoint?
 
     /// Update the peer endpoint after pairing completes. nil-out to revert to
-    /// "no peer" state (jobs will fail with "no peer configured").
+    /// "no peer" state. v1.1: when nil-ing the peer (e.g. user clicked
+    /// "Forget paired peer"), drop any pending jobs in the queue so they
+    /// don't run and emit confusing failures the moment a peer is
+    /// re-configured.
     public func setPeer(_ newPeer: RsyncCommandBuilder.PeerEndpoint?) {
         self.peer = newPeer
+        if newPeer == nil {
+            queue.removeAll()
+        }
     }
 
     /// Swap the rsync command builder at runtime. Used by Settings to apply
@@ -58,7 +64,18 @@ public actor FileSyncActor {
     /// Enqueue a job (or merge into an existing queued one for the same
     /// target+direction). Triggers scheduling so dispatch happens immediately
     /// when slots are free.
+    ///
+    /// v1.1: when no peer is configured (pre-pairing or after Forget),
+    /// jobs are silently dropped instead of cycling through the queue and
+    /// emitting "no peer configured" failures into the user's Recent
+    /// Activity list. The next file change after pairing will enqueue
+    /// fresh, so dropping pre-pair events costs nothing.
     public func enqueue(_ job: SyncJob) {
+        guard peer != nil else {
+            logger.info("dropping job \(job.id) for \(job.target.rawValue) — no peer paired yet",
+                        category: "sync")
+            return
+        }
         if !job.isFullSync,
            let existing = queue.findMergeable(target: job.target, direction: job.direction) {
             queue.mergePaths(into: existing.id, paths: job.paths)
