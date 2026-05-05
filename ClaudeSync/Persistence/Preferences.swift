@@ -108,6 +108,11 @@ extension Preferences {
 /// File-backed preferences store. Loading is best-effort: a missing or
 /// malformed file silently falls back to defaults so the app never refuses
 /// to launch because of corrupted JSON.
+///
+/// v1.1 (SEC-009): every persisted payload is signed with a per-machine
+/// HMAC-SHA256 key kept at `~/.claudesync/.machine-key` (0o600). On load,
+/// the on-disk signature is recomputed; mismatch ⇒ fall back to defaults
+/// + log a tamper warning instead of honoring the modified file.
 public actor PreferencesStore {
 
     public static let defaultURL: URL = {
@@ -115,18 +120,37 @@ public actor PreferencesStore {
             .appendingPathComponent(".claudesync/preferences.json")
     }()
 
+    public enum LoadOutcome: Equatable, Sendable {
+        case loaded
+        case defaultsBecauseMissing
+        case defaultsBecauseCorrupt
+        case defaultsBecauseTampered
+    }
+
     private let fileURL: URL
     private let logger: AppLogger
+    private let integrity: PreferencesIntegrity
     private var cached: Preferences
+    /// What happened on the most recent load attempt.
+    public private(set) var lastLoadOutcome: LoadOutcome
 
     public init(fileURL: URL = PreferencesStore.defaultURL,
                 logger: AppLogger = .shared) {
         self.fileURL = fileURL
         self.logger = logger
-        self.cached = Self.loadFromDisk(at: fileURL, logger: logger)
+        self.integrity = PreferencesIntegrity(preferencesURL: fileURL,
+                                              logger: logger)
+        let (loaded, outcome) = Self.loadFromDisk(
+            at: fileURL,
+            integrity: PreferencesIntegrity(preferencesURL: fileURL, logger: logger),
+            logger: logger
+        )
+        self.cached = loaded
+        self.lastLoadOutcome = outcome
     }
 
     public func current() -> Preferences { cached }
+    public func loadOutcome() -> LoadOutcome { lastLoadOutcome }
 
     public func update(_ transform: (inout Preferences) -> Void) throws {
         var copy = cached
@@ -149,28 +173,64 @@ public actor PreferencesStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(prefs)
         try data.write(to: fileURL, options: .atomic)
-        // SEC-009 partial mitigation: lock file to owner-only so other local
-        // user accounts on a shared Mac can't tamper with the paired peer
-        // record or exclude patterns.
+        // SEC-009: lock to owner-only AND write the HMAC sidecar so a
+        // future load can detect tampering by another local user / process.
         try? fm.setAttributes([.posixPermissions: 0o600],
                               ofItemAtPath: fileURL.path)
+        do {
+            let key = try integrity.loadOrCreateKey()
+            try integrity.writeSignature(for: data, using: key)
+        } catch {
+            logger.warning("Could not write preferences integrity sig: \(error)",
+                           category: "preferences")
+        }
         logger.info("Preferences saved to \(fileURL.path)", category: "preferences")
     }
 
     nonisolated private static func loadFromDisk(
         at url: URL,
+        integrity: PreferencesIntegrity,
         logger: AppLogger
-    ) -> Preferences {
+    ) -> (Preferences, LoadOutcome) {
         guard FileManager.default.fileExists(atPath: url.path) else {
-            return .default
+            return (.default, .defaultsBecauseMissing)
         }
+        let data: Data
         do {
-            let data = try Data(contentsOf: url)
-            return try JSONDecoder().decode(Preferences.self, from: data)
+            data = try Data(contentsOf: url)
         } catch {
-            logger.warning("Preferences load failed (\(error)) — using defaults",
+            logger.warning("Preferences read failed (\(error)) — using defaults",
                            category: "preferences")
-            return .default
+            return (.default, .defaultsBecauseCorrupt)
+        }
+
+        // SEC-009: verify signature before trusting the payload.
+        if FileManager.default.fileExists(atPath: integrity.signatureURL.path) {
+            do {
+                let key = try integrity.loadOrCreateKey()
+                if !integrity.verify(payload: data, using: key) {
+                    logger.warning("Preferences SIGNATURE MISMATCH — refusing to load tampered file. Falling back to defaults.",
+                                   category: "preferences")
+                    return (.default, .defaultsBecauseTampered)
+                }
+            } catch {
+                logger.warning("Could not load integrity key: \(error)",
+                               category: "preferences")
+            }
+        } else {
+            // First-run after upgrade from v1.0.x — file exists but no
+            // signature. Trust this once and the next save will sign it.
+            logger.info("No integrity signature yet — first-run after upgrade",
+                        category: "preferences")
+        }
+
+        do {
+            let prefs = try JSONDecoder().decode(Preferences.self, from: data)
+            return (prefs, .loaded)
+        } catch {
+            logger.warning("Preferences decode failed (\(error)) — using defaults",
+                           category: "preferences")
+            return (.default, .defaultsBecauseCorrupt)
         }
     }
 }
