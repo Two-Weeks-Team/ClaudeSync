@@ -50,6 +50,9 @@ public actor PairingManager {
         public let publicKey: String
         public let publicKeyFingerprint: String
         public let sshPort: UInt16
+        /// v1.1 (SEC-005): peer's SSH host key for known_hosts pre-pop.
+        /// Empty when older peer didn't ship it or local lookup failed.
+        public var sshHostPublicKey: String = ""
     }
 
     public enum State: Equatable, Sendable {
@@ -85,7 +88,18 @@ public actor PairingManager {
         case sendFailed(String)
         case keyManagementFailed(String)
         case codeMismatch
+        case clockSkewTooLarge(seconds: Double)
+        case tooManyAttempts
     }
+
+    /// v1.1 (RCA-M9): if the peer's wall-clock differs from ours by more
+    /// than this many seconds, we refuse the pairing rather than risk
+    /// `newer-wins` ConflictResolver picking the wrong file later.
+    public static let maxClockSkewSeconds: Double = 30
+    /// v1.1 (SEC-003): a single PairingManager session accepts at most one
+    /// pairRequest. Repeated attempts from the same channel are dropped to
+    /// prevent brute force iteration over the 1M code space.
+    public static let maxPairRequestsPerSession: Int = 1
 
     // MARK: - Dependencies
 
@@ -102,6 +116,13 @@ public actor PairingManager {
     private var localPubkeyBytes: Data?
     private var localPubkeyLine: String?
     private var localPubkeyFingerprint: String?
+    /// v1.1 (SEC-003): nonces for the current session. Set once per
+    /// initiate()/start().
+    private var localNonce: Data = Data()
+    private var peerNonce: Data = Data()
+    /// v1.1 (SEC-003): count of pairRequest messages we've handled in
+    /// this session. Anything past `maxPairRequestsPerSession` is dropped.
+    private var pairRequestCount: Int = 0
 
     // MARK: - Init
 
@@ -118,6 +139,9 @@ public actor PairingManager {
     public func start() async throws {
         if listeningTask != nil { return }
         try await ensureLocalKeyMaterial()
+        if localNonce.isEmpty {
+            localNonce = PairingCodeGenerator.newNonce()
+        }
 
         let stream = channel.incomingMessages()
         listeningTask = Task { [weak self] in
@@ -147,7 +171,9 @@ public actor PairingManager {
             username: identity.username,
             publicKey: pubkeyLine,
             publicKeyFingerprint: fingerprint,
-            sshPort: identity.sshPort
+            sshPort: identity.sshPort,
+            clockUnixSeconds: Date().timeIntervalSince1970,
+            nonceHex: PairingCodeGenerator.hexEncode(localNonce)
         )
         do {
             try await channel.send(.pairRequest(payload))
@@ -172,13 +198,20 @@ public actor PairingManager {
               let fingerprint = localPubkeyFingerprint else {
             throw PairingError.keyManagementFailed("local key material not loaded")
         }
+        // v1.1 (SEC-005): try to read this Mac's SSH host key so the
+        // initiator can pre-populate known_hosts. Empty string on failure
+        // is fine — initiator just stays on accept-new TOFU for that host.
+        let hostKey = (try? Self.readLocalSshHostKey()) ?? ""
         let payload = PairAcceptPayload(
             machineId: identity.machineId,
             hostname: identity.hostname,
             username: identity.username,
             publicKey: pubkeyLine,
             publicKeyFingerprint: fingerprint,
-            sshPort: identity.sshPort
+            sshPort: identity.sshPort,
+            clockUnixSeconds: Date().timeIntervalSince1970,
+            nonceHex: PairingCodeGenerator.hexEncode(localNonce),
+            sshHostPublicKey: hostKey
         )
         do {
             try await channel.send(.pairAccept(payload))
@@ -219,7 +252,8 @@ public actor PairingManager {
             username: accept.username,
             publicKey: accept.publicKey,
             publicKeyFingerprint: accept.publicKeyFingerprint,
-            sshPort: accept.sshPort
+            sshPort: accept.sshPort,
+            sshHostPublicKey: accept.sshHostPublicKey
         )
         await transition(to: .completed(paired))
     }
@@ -291,6 +325,26 @@ public actor PairingManager {
                            category: "pairing")
             return
         }
+        // v1.1 (SEC-003): a single session accepts at most one pairRequest.
+        pairRequestCount += 1
+        if pairRequestCount > Self.maxPairRequestsPerSession {
+            await transition(to: .failed(
+                message: "too many pair attempts on this session"
+            ))
+            return
+        }
+        // v1.1 (RCA-M9): clock-skew check first — it's the cheapest gate
+        // and protects ConflictResolver's newer-wins from a peer whose
+        // wall-clock has drifted, regardless of key validity.
+        if req.clockUnixSeconds > 0 {
+            let skew = abs(Date().timeIntervalSince1970 - req.clockUnixSeconds)
+            if skew > Self.maxClockSkewSeconds {
+                await transition(to: .failed(
+                    message: "peer clock skew \(Int(skew))s exceeds limit"
+                ))
+                return
+            }
+        }
         // v1.0.1: refuse a request whose key we cannot parse, or while our
         // own local key material isn't loaded yet. Falling back to empty Data
         // would let two peers compute the SAME code from empty bytes (and
@@ -304,10 +358,15 @@ public actor PairingManager {
             await transition(to: .failed(message: "local public key not loaded"))
             return
         }
-        // Initiator key is *peer*'s here (they sent the pairRequest).
+        // v1.1 (SEC-003): mix in both nonces. peer's nonce is on the wire;
+        // ours was generated in start(). Initiator key is *peer*'s here
+        // (they sent the pairRequest), so ordering is (peer, us).
+        peerNonce = PairingCodeGenerator.hexDecode(req.nonceHex)
         let code = PairingCodeGenerator.generateCode(
             initiatorPublicKey: peerKeyBytes,
-            responderPublicKey: myKeyBytes
+            responderPublicKey: myKeyBytes,
+            initiatorNonce: peerNonce,
+            responderNonce: localNonce
         )
         await transition(to: .receivedPairRequest(req, code: code))
     }
@@ -327,10 +386,23 @@ public actor PairingManager {
             await transition(to: .failed(message: "local public key not loaded"))
             return
         }
-        // We were the initiator, peer is the responder.
+        if accept.clockUnixSeconds > 0 {
+            let skew = abs(Date().timeIntervalSince1970 - accept.clockUnixSeconds)
+            if skew > Self.maxClockSkewSeconds {
+                await transition(to: .failed(
+                    message: "peer clock skew \(Int(skew))s exceeds limit"
+                ))
+                return
+            }
+        }
+        // v1.1 (SEC-003): we were the initiator, peer is the responder.
+        // Order is (us, peer) for both keys and nonces.
+        peerNonce = PairingCodeGenerator.hexDecode(accept.nonceHex)
         let code = PairingCodeGenerator.generateCode(
             initiatorPublicKey: myKeyBytes,
-            responderPublicKey: peerKeyBytes
+            responderPublicKey: peerKeyBytes,
+            initiatorNonce: localNonce,
+            responderNonce: peerNonce
         )
         await transition(to: .receivedPairAccept(accept, code: code))
     }
@@ -382,6 +454,24 @@ public actor PairingManager {
         } catch {
             throw PairingError.keyManagementFailed(String(describing: error))
         }
+    }
+
+    /// Read this Mac's SSH host key (preferring ed25519, falling back to
+    /// rsa) so we can ferry it to the peer in the PairAccept payload for
+    /// SEC-005 known_hosts pre-population.
+    static func readLocalSshHostKey() throws -> String {
+        // /etc/ssh/ssh_host_ed25519_key.pub is world-readable on macOS.
+        let candidates = [
+            "/etc/ssh/ssh_host_ed25519_key.pub",
+            "/etc/ssh/ssh_host_rsa_key.pub",
+        ]
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path),
+               let s = try? String(contentsOfFile: path, encoding: .utf8) {
+                return s.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return ""
     }
 
     /// Parse the raw 32-byte Ed25519 public key out of an OpenSSH

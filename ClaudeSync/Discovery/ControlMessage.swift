@@ -89,11 +89,23 @@ public struct PairRequestPayload: Codable, Equatable, Sendable {
     /// could only assume port 22 and rsync from B→A would fail when A's sshd
     /// listens on a non-standard port.
     public let sshPort: UInt16
+    /// v1.1 (RCA-M9): wall-clock at message construction time, in seconds
+    /// since 1970. Receiver compares against its own `Date()` and warns if
+    /// the skew exceeds `PairingManager.maxClockSkewSeconds` so the
+    /// `newer-wins` ConflictResolver doesn't get fooled by a Mac whose
+    /// clock has drifted.
+    public let clockUnixSeconds: Double
+    /// v1.1 (SEC-003): random per-session nonce mixed into the pairing
+    /// code derivation, defending against pre-computed code attacks
+    /// against replayed key material.
+    public let nonceHex: String
 
     public init(
         machineId: UUID, hostname: String, username: String,
         publicKey: String, publicKeyFingerprint: String,
-        protocolVersion: Int = 1, sshPort: UInt16 = 22
+        protocolVersion: Int = 1, sshPort: UInt16 = 22,
+        clockUnixSeconds: Double = Date().timeIntervalSince1970,
+        nonceHex: String = ""
     ) {
         self.machineId = machineId
         self.hostname = hostname
@@ -102,11 +114,14 @@ public struct PairRequestPayload: Codable, Equatable, Sendable {
         self.publicKeyFingerprint = publicKeyFingerprint
         self.protocolVersion = protocolVersion
         self.sshPort = sshPort
+        self.clockUnixSeconds = clockUnixSeconds
+        self.nonceHex = nonceHex
     }
 
     private enum CodingKeys: String, CodingKey {
         case machineId, hostname, username, publicKey,
-             publicKeyFingerprint, protocolVersion, sshPort
+             publicKeyFingerprint, protocolVersion, sshPort,
+             clockUnixSeconds, nonceHex
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -118,6 +133,9 @@ public struct PairRequestPayload: Codable, Equatable, Sendable {
         self.protocolVersion = try c.decodeIfPresent(Int.self,
                                                      forKey: .protocolVersion) ?? 1
         self.sshPort = try c.decodeIfPresent(UInt16.self, forKey: .sshPort) ?? 22
+        self.clockUnixSeconds = try c.decodeIfPresent(Double.self,
+                                                     forKey: .clockUnixSeconds) ?? 0
+        self.nonceHex = try c.decodeIfPresent(String.self, forKey: .nonceHex) ?? ""
     }
 }
 
@@ -128,10 +146,23 @@ public struct PairAcceptPayload: Codable, Equatable, Sendable {
     public let publicKey: String
     public let publicKeyFingerprint: String
     public let sshPort: UInt16
+    /// v1.1 (RCA-M9): see `PairRequestPayload.clockUnixSeconds`.
+    public let clockUnixSeconds: Double
+    /// v1.1 (SEC-003): responder's per-session nonce, combined with the
+    /// initiator's nonce to derive the visual code.
+    public let nonceHex: String
+    /// v1.1 (SEC-005): peer's SSH host key in OpenSSH "host key" format
+    /// (e.g. `ssh-ed25519 AAAA…`) so the initiator can pre-populate
+    /// known_hosts and switch SSH from `accept-new` TOFU to strict mode.
+    /// Empty string when the responder couldn't read its own host key.
+    public let sshHostPublicKey: String
 
     public init(
         machineId: UUID, hostname: String, username: String,
-        publicKey: String, publicKeyFingerprint: String, sshPort: UInt16 = 22
+        publicKey: String, publicKeyFingerprint: String, sshPort: UInt16 = 22,
+        clockUnixSeconds: Double = Date().timeIntervalSince1970,
+        nonceHex: String = "",
+        sshHostPublicKey: String = ""
     ) {
         self.machineId = machineId
         self.hostname = hostname
@@ -139,5 +170,27 @@ public struct PairAcceptPayload: Codable, Equatable, Sendable {
         self.publicKey = publicKey
         self.publicKeyFingerprint = publicKeyFingerprint
         self.sshPort = sshPort
+        self.clockUnixSeconds = clockUnixSeconds
+        self.nonceHex = nonceHex
+        self.sshHostPublicKey = sshHostPublicKey
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case machineId, hostname, username, publicKey, publicKeyFingerprint,
+             sshPort, clockUnixSeconds, nonceHex, sshHostPublicKey
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.machineId = try c.decode(UUID.self, forKey: .machineId)
+        self.hostname = try c.decode(String.self, forKey: .hostname)
+        self.username = try c.decode(String.self, forKey: .username)
+        self.publicKey = try c.decode(String.self, forKey: .publicKey)
+        self.publicKeyFingerprint = try c.decode(String.self, forKey: .publicKeyFingerprint)
+        self.sshPort = try c.decodeIfPresent(UInt16.self, forKey: .sshPort) ?? 22
+        self.clockUnixSeconds = try c.decodeIfPresent(Double.self,
+                                                     forKey: .clockUnixSeconds) ?? 0
+        self.nonceHex = try c.decodeIfPresent(String.self, forKey: .nonceHex) ?? ""
+        self.sshHostPublicKey = try c.decodeIfPresent(String.self,
+                                                     forKey: .sshHostPublicKey) ?? ""
     }
 }

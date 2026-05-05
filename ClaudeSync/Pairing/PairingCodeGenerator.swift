@@ -18,13 +18,27 @@ import CryptoKit
 public enum PairingCodeGenerator {
     /// Produce the 6-digit pairing code for the given key pair. Always
     /// returns a 6-character string of decimal digits, zero-padded.
+    ///
+    /// v1.1 (SEC-003): nonces are now part of the derivation so that:
+    /// (a) two pairings of the same physical keys produce different codes
+    ///     (defends against pre-computation),
+    /// (b) replaying a captured pairRequest on a fresh session no longer
+    ///     produces a valid code (the nonce won't match).
+    /// Both nonces default to empty Data for backwards compatibility with
+    /// the v1.0.x wire format.
     public static func generateCode(
         initiatorPublicKey: Data,
-        responderPublicKey: Data
+        responderPublicKey: Data,
+        initiatorNonce: Data = Data(),
+        responderNonce: Data = Data()
     ) -> String {
-        var combined = Data(capacity: initiatorPublicKey.count + responderPublicKey.count)
+        var combined = Data(capacity:
+            initiatorPublicKey.count + responderPublicKey.count
+            + initiatorNonce.count + responderNonce.count)
         combined.append(initiatorPublicKey)
         combined.append(responderPublicKey)
+        combined.append(initiatorNonce)
+        combined.append(responderNonce)
 
         let digest = SHA256.hash(data: combined)
         let prefix = digest.prefix(4)
@@ -35,5 +49,35 @@ public enum PairingCodeGenerator {
 
         let truncated = value % 1_000_000
         return String(format: "%06u", truncated)
+    }
+
+    /// Generate a fresh per-session 16-byte nonce.
+    public static func newNonce() -> Data {
+        var bytes = [UInt8](repeating: 0, count: 16)
+        for i in 0..<bytes.count {
+            bytes[i] = UInt8.random(in: 0...255)
+        }
+        return Data(bytes)
+    }
+
+    /// Hex encoding helper used to ferry nonces over the wire.
+    public static func hexEncode(_ data: Data) -> String {
+        data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Hex decoding helper. Returns empty Data on malformed input so the
+    /// caller can treat it as "no nonce" rather than throwing.
+    public static func hexDecode(_ hex: String) -> Data {
+        let chars = Array(hex)
+        guard chars.count % 2 == 0 else { return Data() }
+        var out = Data(capacity: chars.count / 2)
+        var i = 0
+        while i < chars.count {
+            guard let hi = chars[i].hexDigitValue,
+                  let lo = chars[i + 1].hexDigitValue else { return Data() }
+            out.append(UInt8(hi * 16 + lo))
+            i += 2
+        }
+        return out
     }
 }
