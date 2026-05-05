@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync Phase 6 완료 — UI 통합 + 전체 5-Phase 종합</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#0d1117;color:#e6edf3;line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased}
+  :root{--bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;--border-soft:#21262d;--text:#e6edf3;--text-dim:#8b949e;--text-muted:#6e7681;--accent:#58a6ff;--accent-soft:rgba(88,166,255,0.12);--success:#3fb950;--warning:#d29922;--error:#f85149;--purple:#bc8cff;--code-bg:#1c2128}
+  .layout{display:grid;grid-template-columns:280px 1fr;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}.toc-sidebar{position:static!important;height:auto!important;border-right:none!important;border-bottom:1px solid var(--border)}}
+  .toc-sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;padding:28px 20px;border-right:1px solid var(--border);background:var(--bg)}
+  .toc-title{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin:0 0 12px;font-weight:600}
+  .toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  .toc li{margin:0;counter-increment:toc}
+  .toc a{display:block;padding:7px 10px;border-radius:6px;color:var(--text-dim);text-decoration:none;font-size:13.5px;transition:all 0.15s;border-left:2px solid transparent}
+  .toc a::before{content:counter(toc) ".";color:var(--text-muted);margin-right:8px;font-variant-numeric:tabular-nums}
+  .toc a:hover{color:var(--text);background:var(--surface)}
+  .toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent)}
+  .content{padding:48px 56px 120px;max-width:1080px}
+  @media (max-width:700px){.content{padding:28px 20px 80px}}
+  .report-header{margin-bottom:48px}
+  .report-header h1{font-size:30px;font-weight:700;margin:0 0 12px;line-height:1.25;letter-spacing:-0.01em}
+  .report-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--text-dim);font-size:13px}
+  .report-meta .badge{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px}
+  .badge-pass{background:rgba(63,185,80,0.12);color:var(--success);border-color:rgba(63,185,80,0.3)}
+  .badge-info{background:rgba(88,166,255,0.12);color:var(--accent);border-color:rgba(88,166,255,0.3)}
+  .badge-purple{background:rgba(188,140,255,0.14);color:var(--purple);border-color:rgba(188,140,255,0.3)}
+  section{margin-bottom:56px;scroll-margin-top:24px}
+  section h2{font-size:22px;font-weight:600;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--border);letter-spacing:-0.005em}
+  section h3{font-size:17px;font-weight:600;margin:26px 0 10px;color:var(--text)}
+  section p{margin:0 0 14px;color:var(--text)}
+  .table-wrap{overflow-x:auto;margin:12px 0 18px;border-radius:8px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--surface)}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;color:var(--text);font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em}
+  tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;color:var(--text-dim);text-align:right}
+  td code{font-size:12.5px}
+  tr.totals td{font-weight:700;background:rgba(63,185,80,0.08);color:var(--text)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.02em}
+  .pill-low{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-medium{background:rgba(210,153,34,0.16);color:var(--warning)}
+  .pill-high{background:rgba(248,81,73,0.16);color:var(--error)}
+  .pill-pass{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-info{background:rgba(88,166,255,0.14);color:var(--accent)}
+  code{font-family:'JetBrains Mono','Fira Code','SF Mono',Consolas,monospace;background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:13px;color:#c9d1d9}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0 18px;font-size:12.5px;line-height:1.55}
+  pre code{background:none;padding:0;font-size:inherit;color:var(--text)}
+  pre .lang-label{display:inline-block;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+  .callout{margin:14px 0 18px;padding:12px 16px;border-radius:8px;border-left:4px solid;background:var(--surface);font-size:13.5px}
+  .callout-info{border-color:var(--accent);background:rgba(88,166,255,0.06)}
+  .callout-success{border-color:var(--success);background:rgba(63,185,80,0.06)}
+  .callout-warning{border-color:var(--warning);background:rgba(210,153,34,0.06)}
+  .callout-tip{border-color:var(--purple);background:rgba(188,140,255,0.06)}
+  .callout strong{color:var(--text)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0 22px}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .metric-value{font-size:26px;font-weight:700;color:var(--text);line-height:1.1;font-variant-numeric:tabular-nums}
+  .metric-value.success{color:var(--success)}
+  .metric-value.accent{color:var(--accent)}
+  .metric-value.purple{color:var(--purple)}
+  .metric-label{font-size:12px;color:var(--text-dim);margin-top:6px;text-transform:uppercase;letter-spacing:0.04em}
+  .chart-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin:14px 0 22px}
+  @media (max-width:720px){.chart-grid{grid-template-columns:1fr}}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .chart-card h4{margin:0 0 10px;font-size:13px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:600}
+  .chart-canvas-wrap{position:relative;height:240px}
+  ul,ol{padding-left:22px}
+  ul li,ol li{margin:4px 0}
+  .question{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--purple);border-radius:8px;padding:14px 18px;margin:12px 0}
+  .question .q-tag{display:inline-block;background:rgba(188,140,255,0.14);color:var(--purple);font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+  .question .q-title{font-weight:600;margin-bottom:6px;color:var(--text)}
+  .question .q-body{color:var(--text-dim);font-size:13.5px}
+  .back-top{position:fixed;right:24px;bottom:24px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 0.2s,background 0.15s;font-size:18px;z-index:10}
+  .back-top.visible{opacity:0.85;pointer-events:auto}
+  .back-top:hover{opacity:1;background:var(--accent-soft);border-color:var(--accent)}
+  .commit-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin:8px 0}
+  .commit-card .sha{font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:13px}
+  @media print{body{background:white;color:black;font-size:11px}.toc-sidebar,.back-top{display:none}.layout{display:block;max-width:none}.content{padding:12mm;max-width:none}a{color:inherit;text-decoration:underline}pre,table,.callout,.question{page-break-inside:avoid}h2,h3{page-break-after:avoid}.metric,.callout,.chart-card,.question,table{background:white!important;border-color:#d0d7de!important}.metric-value,.metric-label,th,td,.toc-title{color:#1f2328!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="toc-title">목차</div>
+    <nav class="toc">
+      <ol>
+        <li><a href="#sec-1">Executive Summary</a></li>
+        <li><a href="#sec-2">Phase 6 산출물</a></li>
+        <li><a href="#sec-3">UI 변화 — Before / After</a></li>
+        <li><a href="#sec-4">테스트 결과 (162/162)</a></li>
+        <li><a href="#sec-5">실 동작 검증 — 라이브 로그</a></li>
+        <li><a href="#sec-6">전체 6-Phase 종합 (Phase 1→6)</a></li>
+        <li><a href="#sec-7">커밋 내역</a></li>
+        <li><a href="#sec-8">알려진 잔여 작업</a></li>
+        <li><a href="#sec-9">v1.0 출하 체크리스트</a></li>
+        <li><a href="#sec-10">사용자 결정 필요 사항</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <header class="report-header">
+      <h1>ClaudeSync Phase 6 완료 — UI 통합 + 6-Phase 종합</h1>
+      <div class="report-meta">
+        <span>2026-05-05</span>
+        <span>·</span>
+        <span>main 브랜치</span>
+        <span class="badge badge-pass">Phase 6 ✅ 완료</span>
+        <span class="badge badge-pass">162/162 tests</span>
+        <span class="badge badge-purple">v0.1.0 MVP 도달</span>
+        <span class="badge badge-info">origin/main 동기화</span>
+        <span class="badge">Generated by Claude Code</span>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="sec-1">
+      <h2>1. Executive Summary</h2>
+      <p>HANDOFF의 마지막 코어 단계인 Phase 6 (UI 통합)이 완료되어 ClaudeSync가 <strong>v0.1.0 MVP에 도달</strong>했습니다. AppEnvironment가 모든 Phase 1~5 액터(FileWatcherActor, FileSyncActor, BatchAccumulator, ConflictResolver, SyncCoordinator, SSHKeyManager)를 보유하고 부팅하며, MenuBarRootView가 per-target 상태 / 최근 활동 / 강제 동기화 버튼을 직접 노출합니다. SyncHistory는 100건을 <code>~/.claudesync/history.json</code>으로 영속화하고, FirstLaunchPairingView는 PairingManager 콜백 클로저로 결합돼 실제 페어링 흐름이 UI에서 작동합니다.</p>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-value success">162</div><div class="metric-label">Tests Passing</div></div>
+        <div class="metric"><div class="metric-value">22</div><div class="metric-label">Test Suites</div></div>
+        <div class="metric"><div class="metric-value accent">11.0s</div><div class="metric-label">Wall Time</div></div>
+        <div class="metric"><div class="metric-value">+5</div><div class="metric-label">신규 테스트</div></div>
+        <div class="metric"><div class="metric-value">2</div><div class="metric-label">신규 Source 파일</div></div>
+        <div class="metric"><div class="metric-value">3</div><div class="metric-label">수정된 Source 파일</div></div>
+        <div class="metric"><div class="metric-value purple">v0.1.0</div><div class="metric-label">MVP Reached</div></div>
+        <div class="metric"><div class="metric-value">~3h</div><div class="metric-label">실 작업 시간</div></div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong>판정:</strong> Phase 6 완료. 앱이 라이브로 동작 — 부팅하면 자동으로 ~/.claude/ 변경을 감지하고 sync queue에 jobs를 쌓는 것이 로그로 검증됨 (<a href="#sec-5">§5</a>). 다음은 v1.0 출하를 위한 hardening (Universal binary + Developer ID 서명 + AppIcon + RSS 최적화) 또는 사용자 두 Mac 실기 시연.
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="sec-2">
+      <h2>2. Phase 6 산출물</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>레이어</th><th>파일</th><th class="num">라인</th><th>역할</th></tr></thead>
+          <tbody>
+            <tr><td>App</td><td><code>App/AppEnvironment.swift</code></td><td class="num">95</td><td>모든 액터 인스턴스 보유 + bootSyncEngine() / shutdownSyncEngine() 라이프사이클</td></tr>
+            <tr><td>UI</td><td><code>UI/MenuBarRootView.swift</code></td><td class="num">170</td><td>per-target 상태/last-sync/force-sync, 최근 활동 5개, auto-boot via .task</td></tr>
+            <tr><td>UI</td><td><code>UI/OnboardingViewModel.swift</code></td><td class="num">110</td><td>onAcceptPair / onConfirmPair / onRejectPair 콜백 클로저 노출</td></tr>
+            <tr><td>UI</td><td><code>UI/FirstLaunchPairingView.swift</code></td><td class="num">220</td><td>역할별 (responder/initiator/sentPairAccept) 다른 primary 버튼, 코드 박스 분리 함수</td></tr>
+            <tr><td>Persistence</td><td><code>Persistence/SyncHistory.swift</code></td><td class="num">130</td><td>~/.claudesync/history.json 영속화 (100건), record/recent/clear/maxEntries</td></tr>
+            <tr><td>Test</td><td><code>SyncHistoryTests.swift</code></td><td class="num">100</td><td>5 tests — record+read, 재인스턴스화 후 읽기, maxEntries 캡, 모든 status 매핑, clear</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="sec-3">
+      <h2>3. UI 변화 — Before / After</h2>
+
+      <h3>Phase 1 (initial)</h3>
+      <pre><span class="lang-label">menu bar popover</span><code>┌─────────────────────────────┐
+│ ⊙ ClaudeSync                │
+│   Phase 1 — menu bar shell  │
+├─────────────────────────────┤
+│ Status                      │
+│ Idle                        │
+├─────────────────────────────┤
+│           [Quit ClaudeSync] │
+└─────────────────────────────┘</code></pre>
+
+      <h3>Phase 6 (now)</h3>
+      <pre><span class="lang-label">menu bar popover</span><code>┌──────────────────────────────────────────┐
+│ ✓ ClaudeSync                             │
+│   Watching                               │
+├──────────────────────────────────────────┤
+│ Coordinator                              │
+│ Watching for changes                     │
+├──────────────────────────────────────────┤
+│ Targets                                  │
+│ 📁 Claude Code      2 minutes ago    ↻  │
+│ 📁 Claude Desktop   —                ↻  │
+│ 📁 Codex CLI        just now         ↻  │
+│ 📁 Projects         —                ↻  │
+├──────────────────────────────────────────┤
+│ Recent Activity                          │
+│ ✅  Synced successfully                   │
+│ ✅  Synced successfully                   │
+│ ⚠️  Partial: 3 ok, 1 failed              │
+│ ✅  Synced successfully                   │
+├──────────────────────────────────────────┤
+│ [Open Onboarding]      [Quit ClaudeSync] │
+└──────────────────────────────────────────┘</code></pre>
+    </section>
+
+    <!-- 4 -->
+    <section id="sec-4">
+      <h2>4. 테스트 결과 (162/162 PASS)</h2>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>Phase별 테스트 수 누적 (P1→P6)</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartByPhase"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Phase별 누적 라인 수 (Source + Test)</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartLines"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="sec-5">
+      <h2>5. 실 동작 검증 — 라이브 로그</h2>
+      <p>Phase 6 빌드를 실행하고 4초 동안 동작 시킨 결과 (RSS 92 MB):</p>
+<pre><span class="lang-label">~/.claudesync/logs/claudesync.log</span><code>2026-05-05T08:07:39.865Z [INFO ] [app]   AppEnvironment initialized
+2026-05-05T08:07:46.155Z [INFO ] [sync]  merged 1 paths into existing job 632B757E-78D1-4AE7-A925-E8D019AC244A
+2026-05-05T08:08:02.527Z [INFO ] [app]   AppEnvironment initialized</code></pre>
+      <p>2번째 라인 "merged 1 paths into existing job"은 FileWatcherActor가 실제 ~/.claude 영역의 파일 변경을 감지하고 → 2초 debouncer 통과 → SyncCoordinator router → FileSyncActor.enqueue → 기존 동일 (target, direction) 작업과 mergePaths 코얼레스가 일어났음을 증명합니다. 즉, <strong>코어 파이프라인이 단순 코드 검증이 아닌 실제 OS 이벤트로 살아 동작</strong>합니다.</p>
+      <div class="callout callout-info">
+        <strong>peer 미연결 상태:</strong> 현재는 watcher + 큐만 동작합니다. 실제 rsync 호출은 peer가 nil이라 fail("no peer configured")로 끝납니다 — 사용자가 Onboarding 윈도우에서 페어링을 완료하면 peer가 주입돼 실 송신까지 이어집니다.
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section id="sec-6">
+      <h2>6. 전체 6-Phase 종합 (Phase 1 → 6)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Phase</th><th>핵심 산출물</th><th class="num">테스트</th><th>대표 파일</th></tr></thead>
+          <tbody>
+            <tr><td>1 — Foundation</td><td>MenuBarExtra shell + ProcessRunner + Logger + xcodegen 빌드 시스템</td><td class="num">4</td><td>ClaudeSyncApp, ProcessRunner, Logger</td></tr>
+            <tr><td>2 — Pairing</td><td>SHA-256 페어링 코드 + SSH preflight + FDA 검사 + Ed25519 키 관리 + PairingManager 상태머신 + Onboarding UI</td><td class="num">54</td><td>PairingManager, SSHKeyManager, RemoteLoginPreflight, FullDiskAccessChecker</td></tr>
+            <tr><td>3 — Discovery</td><td>Bonjour _claudesync._tcp NWBrowser/NWListener + 길이접두 JSON framer + PeerChannel 추상화 + 풀 페어링 E2E</td><td class="num">31</td><td>PeerDiscoveryActor, ClaudeSyncProtocolFramer, NWConnectionPeerChannel</td></tr>
+            <tr><td>4 — FileWatcher</td><td>FSEvents C API 브리지 + 2s per-path debouncer + IgnorePatterns + 3-Tier 라우터 + FileWatcherActor</td><td class="num">26</td><td>FSEventStreamWatcher, Debouncer, FileWatcherActor</td></tr>
+            <tr><td>5 — Sync Engine</td><td>SyncJob priority queue + RsyncCommandBuilder (openrsync 호환) + ConflictResolver (newer-wins/JSON merge/keepBoth) + FileSyncActor + SyncCoordinator + 자동 loopback E2E + 두 Mac 실기 가이드</td><td class="num">42</td><td>SyncCoordinator, FileSyncActor, ConflictResolver, RsyncCommandBuilder</td></tr>
+            <tr><td>6 — UI 통합</td><td>AppEnvironment 액터 wiring + 풀 MenuBarRootView + SyncHistory 영속화 + PairingManager UI 결합</td><td class="num">5</td><td>AppEnvironment, MenuBarRootView, SyncHistory</td></tr>
+            <tr class="totals"><td>합계</td><td>v0.1.0 MVP</td><td class="num">162</td><td>22 스위트, 11s 총 실행</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>한 세션 누적 통계</h3>
+      <div class="metrics">
+        <div class="metric"><div class="metric-value">11</div><div class="metric-label">커밋</div></div>
+        <div class="metric"><div class="metric-value">37</div><div class="metric-label">신규 Source 파일</div></div>
+        <div class="metric"><div class="metric-value">22</div><div class="metric-label">테스트 스위트</div></div>
+        <div class="metric"><div class="metric-value success">162</div><div class="metric-label">테스트 통과</div></div>
+        <div class="metric"><div class="metric-value">~6,500</div><div class="metric-label">총 라인 (코드+테스트)</div></div>
+        <div class="metric"><div class="metric-value">5</div><div class="metric-label">HTML 보고서</div></div>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section id="sec-7">
+      <h2>7. 커밋 내역</h2>
+      <div class="commit-card">
+        <div><span class="sha">3dfe46b</span> · <span class="pill pill-info">feat</span> · <strong>Phase 6 — UI integration (sync engine wiring, history, pairing)</strong></div>
+        <div style="color:var(--text-dim);font-size:13px;margin-top:4px">7 files, +468/-45 lines · AppEnvironment + MenuBarRootView + SyncHistory + Onboarding/View 결합</div>
+      </div>
+
+      <pre><span class="lang-label">git log --oneline -11 (전체 세션)</span><code>3dfe46b feat: Phase 6 — UI integration (sync engine wiring, history, pairing)
+e7ffb51 docs(reports): add Phase 5 completion HTML report
+19fe94f feat(demo): two-Mac sync demo + loopback E2E rsync test
+8e6471d feat: Phase 5 — sync engine (rsync queue, conflict resolver, coordinator)
+9211afd docs(reports): add Phase 4 completion HTML report
+9f9bfac feat: Phase 4 — FSEvents file watcher with 3-Tier routing
+20e8359 docs(reports): add Phase 1 and Phase 2+3 completion HTML reports
+02829f3 feat: complete Phase 2+3 — Bonjour discovery and pairing handshake
+b9b31ea feat: pairing primitives (codegen, preflight, SSH key mgmt, control codec)
+6ec6b14 feat: add Phase 1 menu bar shell, ProcessRunner, and Logger
+26dcfaa chore: scaffold Xcode project via xcodegen
+
+# Branch: main → origin/main (in sync, 11 commits since project init)</code></pre>
+    </section>
+
+    <!-- 8 -->
+    <section id="sec-8">
+      <h2>8. 알려진 잔여 작업</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>항목</th><th>현재</th><th>해결 방법 / 우선순위</th></tr></thead>
+          <tbody>
+            <tr><td>peer 자동 wiring</td><td>PeerDiscoveryActor의 onPeerAppeared 이벤트 → AppEnvironment.peer 주입 → FileSyncActor 재구성 흐름 미구현</td><td>다음 작은 작업 (1h). PeerDiscoveryActor.events()를 AppEnvironment에서 구독.</td></tr>
+            <tr><td>BatchAccumulator stream wire-up</td><td>SyncCoordinator 내부 placeholder 코멘트만 남음</td><td>~30분. accumulator의 stream을 잡고 enqueue로 라우팅하는 pump task.</td></tr>
+            <tr><td>BrewSyncManager / NpmGlobalSyncManager</td><td>HANDOFF Phase 6 항목, 미구현. SyncMode.manifest 분기 자체는 SyncTarget enum에 미정의.</td><td>v1.1 — 코어 동기화에 영향 없음.</td></tr>
+            <tr><td>EnvironmentDiffView</td><td>UI 미구현</td><td>v1.1 — Brew/Npm와 묶음</td></tr>
+            <tr><td>Settings Window (Bandwidth, exclude patterns)</td><td>UI 미구현</td><td>v1.1</td></tr>
+            <tr><td>Launch at Login (SMAppService)</td><td>미구현</td><td>출하 직전 (1h)</td></tr>
+            <tr><td>Universal binary, Developer ID, AppIcon</td><td>arm64 only, ad-hoc, 자산 비어 있음</td><td>출하 hardening 단계</td></tr>
+            <tr><td>RSS 92MB &gt; 50MB 목표</td><td>WindowGroup으로 +12MB. Debug unwarmed</td><td>Release 측정 후 Instruments 프로파일</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="sec-9">
+      <h2>9. v1.0 출하 체크리스트</h2>
+      <ul>
+        <li>peer 자동 wiring (PeerDiscoveryActor.events() → AppEnvironment.peer)</li>
+        <li>BatchAccumulator stream pump 완성</li>
+        <li>두 Mac 실기 시연 — 사용자 직접 (docs/DEMO_TWO_MACS.md 참조)</li>
+        <li>Launch at Login (SMAppService.mainApp.register)</li>
+        <li>Universal binary (ARCHS = arm64 x86_64) + 빌드 검증</li>
+        <li>AppIcon 자산 (16/32/128/256/512 + @2x) 작성</li>
+        <li>Developer ID Application 서명 + xcrun notarytool 공증</li>
+        <li>DMG 패키징 + README 업데이트 + GitHub Release</li>
+        <li>Release 빌드 RSS 측정 (Instruments → PRD G4 50MB 목표 검증)</li>
+        <li>72시간 dogfood 테스트 (실 환경에서 프리징/누수/충돌 없음)</li>
+      </ul>
+    </section>
+
+    <!-- 10 -->
+    <section id="sec-10">
+      <h2>10. 사용자 결정 필요 사항</h2>
+      <p>다음 응답에서 <code>AskUserQuestion</code>으로 묶어 묻겠습니다.</p>
+
+      <div class="question">
+        <span class="q-tag">Q1 · 다음 단계</span>
+        <div class="q-title">peer 자동 wiring + BatchAccumulator pump를 마저 끝낼까, 출하 hardening으로 갈까?</div>
+        <div class="q-body">두 작업은 ~1.5h. 마치면 진정한 v0.2.0. 출하 단계는 더 큰 작업(Universal/서명/공증)이지만 기능 완성도와는 무관하게 동시 진행 가능.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q2 · 두 Mac 시연</span>
+        <div class="q-title">docs/DEMO_TWO_MACS.md를 사용자가 지금 따라 진행할 준비가 되셨나요?</div>
+        <div class="q-body">한 Mac에서 build → app 실행 → 메뉴바 확인까지는 Claude Code가 검증함. 두 번째 Mac에서의 실행과 두 사이의 페어링/rsync는 사용자만 검증 가능.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q3 · 세션 종료</span>
+        <div class="q-title">이번 세션을 종료할까요?</div>
+        <div class="q-body">컨텍스트가 매우 길어진 상태. v0.1.0 MVP 도달 + 출하 항목 명확. HANDOFF.md 최종 업데이트 후 종료가 자연스러운 시점.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="back-top" id="backTop" aria-label="맨 위로" title="맨 위로">↑</button>
+
+<script>
+  (function(){
+    const links=document.querySelectorAll('.toc a');
+    const sections=Array.from(document.querySelectorAll('section[id]'));
+    const linkMap=new Map();
+    links.forEach(a=>linkMap.set(a.getAttribute('href').slice(1),a));
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        const id=entry.target.id;
+        const link=linkMap.get(id);
+        if(!link)return;
+        if(entry.isIntersecting){
+          links.forEach(l=>l.classList.remove('active'));
+          link.classList.add('active');
+        }
+      });
+    },{rootMargin:'-30% 0px -60% 0px',threshold:0});
+    sections.forEach(s=>obs.observe(s));
+  })();
+  (function(){
+    const btn=document.getElementById('backTop');
+    window.addEventListener('scroll',()=>{btn.classList.toggle('visible',window.scrollY>400)},{passive:true});
+    btn.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+  })();
+  (function(){
+    if(typeof Chart==='undefined')return;
+    Chart.defaults.color='#8b949e';
+    Chart.defaults.borderColor='#30363d';
+    Chart.defaults.font.family='Inter, system-ui, sans-serif';
+
+    new Chart(document.getElementById('chartByPhase'),{
+      type:'line',
+      data:{
+        labels:['P1','P2','P3','P4','P5','P6'],
+        datasets:[{
+          label:'Cumulative tests',
+          data:[4, 4+54, 4+54+31, 4+54+31+26, 4+54+31+26+42, 4+54+31+26+42+5],
+          borderColor:'#3fb950',
+          backgroundColor:'rgba(63,185,80,0.15)',
+          tension:0.3,
+          fill:true,
+          pointBackgroundColor:'#3fb950'
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        scales:{x:{grid:{color:'#21262d'}},y:{grid:{color:'#21262d'},beginAtZero:true}},
+        plugins:{legend:{display:false}}
+      }
+    });
+
+    new Chart(document.getElementById('chartLines'),{
+      type:'bar',
+      data:{
+        labels:['P1','P2','P3','P4','P5','P6'],
+        datasets:[
+          {label:'Source', data:[400, 1100, 750, 660, 850, 525], backgroundColor:'#58a6ff', stack:'a'},
+          {label:'Tests',  data:[ 50,  720, 600, 590, 770, 100], backgroundColor:'#bc8cff', stack:'a'}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:'#21262d'},beginAtZero:true}},
+        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}
+      }
+    });
+  })();
+</script>
+</body>
+</html>
