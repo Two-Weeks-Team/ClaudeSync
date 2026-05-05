@@ -15,6 +15,10 @@ final class AppEnvironment {
     /// `SyncCoordinator` once Phase 3+ wiring lands.
     var overallStatus: OverallStatus = .idle
 
+    /// True if the first-launch onboarding window should appear. Becomes
+    /// `false` once pairing completes or the user explicitly skips.
+    var needsOnboarding: Bool = true
+
     init(logger: AppLogger = .shared) {
         self.logger = logger
         logger.info("AppEnvironment initialized", category: "app")

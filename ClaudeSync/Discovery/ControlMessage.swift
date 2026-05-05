@@ -12,6 +12,10 @@ import Foundation
 public enum ControlMessage: Codable, Equatable, Sendable {
     case pairRequest(PairRequestPayload)
     case pairAccept(PairAcceptPayload)
+    /// Initiator's final confirmation that the visual code matched. Until this
+    /// arrives on the responder side, neither machine has committed the peer's
+    /// key into authorized_keys (responder commits *only* on receiving this).
+    case pairConfirm
     case pairReject(reason: String)
     case heartbeat(timestamp: Date)
     case disconnect(reason: String)
@@ -30,6 +34,8 @@ public enum ControlMessage: Codable, Equatable, Sendable {
             self = .pairRequest(try c.decode(PairRequestPayload.self, forKey: .payload))
         case "pairAccept":
             self = .pairAccept(try c.decode(PairAcceptPayload.self, forKey: .payload))
+        case "pairConfirm":
+            self = .pairConfirm
         case "pairReject":
             self = .pairReject(reason: try c.decode(String.self, forKey: .reason))
         case "heartbeat":
@@ -55,6 +61,8 @@ public enum ControlMessage: Codable, Equatable, Sendable {
         case .pairAccept(let p):
             try c.encode("pairAccept", forKey: .type)
             try c.encode(p, forKey: .payload)
+        case .pairConfirm:
+            try c.encode("pairConfirm", forKey: .type)
         case .pairReject(let reason):
             try c.encode("pairReject", forKey: .type)
             try c.encode(reason, forKey: .reason)

@@ -1,0 +1,133 @@
+import Foundation
+import Network
+import os
+
+/// `PeerChannel` backed by a real `NWConnection` running the ClaudeSync
+/// length-prefixed JSON framer. Used in production; tests prefer
+/// ``LoopbackPeerChannel``.
+public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
+    public enum ChannelError: Error, Sendable {
+        case sendFailed(String)
+        case notReady
+        case closed
+    }
+
+    fileprivate struct State {
+        var continuation: AsyncStream<ControlMessage>.Continuation?
+        var isStarted = false
+        var isClosed = false
+    }
+
+    private let connection: NWConnection
+    private let queue: DispatchQueue
+    private let logger = AppLogger.shared
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let reader = FrameCodec.StreamReader()
+
+    public init(connection: NWConnection,
+                queue: DispatchQueue = DispatchQueue(label: "claudesync.peer-channel")) {
+        self.connection = connection
+        self.queue = queue
+    }
+
+    // MARK: - PeerChannel
+
+    public func send(_ message: ControlMessage) async throws {
+        let closed = state.withLock { $0.isClosed }
+        guard !closed else { throw ChannelError.closed }
+
+        let bytes = try FrameCodec().encode(message)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: bytes, completion: .contentProcessed { error in
+                if let error {
+                    continuation.resume(throwing: ChannelError.sendFailed(error.localizedDescription))
+                } else {
+                    continuation.resume(returning: ())
+                }
+            })
+        }
+    }
+
+    public func incomingMessages() -> AsyncStream<ControlMessage> {
+        AsyncStream<ControlMessage> { continuation in
+            let alreadyStarted = self.state.withLock { st -> Bool in
+                st.continuation?.finish()
+                st.continuation = continuation
+                let already = st.isStarted
+                st.isStarted = true
+                return already
+            }
+
+            continuation.onTermination = { [weak self] _ in
+                self?.state.withLock { st in st.continuation = nil }
+            }
+
+            if !alreadyStarted {
+                self.startStateMonitoring()
+                self.connection.start(queue: self.queue)
+            }
+            self.scheduleReceive()
+        }
+    }
+
+    public func close() async {
+        let cont = state.withLock { st -> AsyncStream<ControlMessage>.Continuation? in
+            guard !st.isClosed else { return nil }
+            st.isClosed = true
+            let c = st.continuation
+            st.continuation = nil
+            return c
+        }
+        cont?.finish()
+        connection.cancel()
+    }
+
+    // MARK: - Internals
+
+    private func startStateMonitoring() {
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .failed(let err):
+                self.logger.warning("NWConnection failed: \(err.localizedDescription)", category: "discovery")
+                Task { await self.close() }
+            case .cancelled:
+                Task { await self.close() }
+            default:
+                break
+            }
+        }
+    }
+
+    private func scheduleReceive() {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+
+            if let data, !data.isEmpty {
+                do {
+                    let messages = try self.reader.appendDecodingMessages(data)
+                    let cont = self.state.withLock { $0.continuation }
+                    for msg in messages { cont?.yield(msg) }
+                } catch {
+                    self.logger.warning("Frame decode failed: \(error)", category: "discovery")
+                    Task { await self.close() }
+                    return
+                }
+            }
+
+            if let error {
+                self.logger.warning("NWConnection receive error: \(error.localizedDescription)", category: "discovery")
+                Task { await self.close() }
+                return
+            }
+
+            if isComplete {
+                Task { await self.close() }
+                return
+            }
+
+            self.scheduleReceive()
+        }
+    }
+}

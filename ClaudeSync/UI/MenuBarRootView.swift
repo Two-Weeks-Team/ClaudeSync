@@ -45,8 +45,15 @@ struct MenuBarRootView: View {
         }
     }
 
+    @Environment(\.openWindow) private var openWindow
+
     private var footer: some View {
         HStack {
+            Button("Open Onboarding") {
+                openWindow(id: "onboarding")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .buttonStyle(.bordered)
             Spacer()
             Button("Quit ClaudeSync") {
                 NSApp.terminate(nil)
