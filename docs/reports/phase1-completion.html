@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync Phase 1 완료 보고 및 Phase 2 진입 계획</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  /* === Reset & Base === */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* === Theme Variables === */
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2128;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-muted: #6e7681;
+    --accent: #58a6ff;
+    --accent-soft: rgba(88,166,255,0.12);
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f85149;
+    --purple: #bc8cff;
+    --code-bg: #1c2128;
+  }
+
+  /* === Layout === */
+  .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .toc-sidebar { position: static !important; height: auto !important; border-right: none !important; border-bottom: 1px solid var(--border); }
+  }
+
+  /* === TOC Sidebar === */
+  .toc-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 20px;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .toc-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: toc;
+  }
+  .toc li { margin: 0; counter-increment: toc; }
+  .toc a {
+    display: block;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 13.5px;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .toc a::before {
+    content: counter(toc) ".";
+    color: var(--text-muted);
+    margin-right: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface); }
+  .toc a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+  }
+
+  /* === Main Content === */
+  .content {
+    padding: 48px 56px 120px;
+    max-width: 980px;
+  }
+  @media (max-width: 700px) {
+    .content { padding: 28px 20px 80px; }
+  }
+
+  /* === Header === */
+  .report-header { margin-bottom: 56px; }
+  .report-header h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  .report-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .report-meta .badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+  }
+  .badge-status-pass {
+    background: rgba(63,185,80,0.12);
+    color: var(--success);
+    border-color: rgba(63,185,80,0.3);
+  }
+  .badge-status-pending {
+    background: rgba(210,153,34,0.12);
+    color: var(--warning);
+    border-color: rgba(210,153,34,0.3);
+  }
+
+  /* === Sections === */
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  section h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.005em;
+  }
+  section h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 26px 0 10px;
+    color: var(--text);
+  }
+  section p { margin: 0 0 14px; color: var(--text); }
+
+  /* === Tables === */
+  .table-wrap { overflow-x: auto; margin: 12px 0 18px; border-radius: 8px; border: 1px solid var(--border); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    background: var(--surface);
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-2);
+    font-weight: 600;
+    color: var(--text);
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+  td code { font-size: 12.5px; }
+
+  /* Severity / Risk pill */
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .pill-low    { background: rgba(63,185,80,0.14); color: var(--success); }
+  .pill-medium { background: rgba(210,153,34,0.16); color: var(--warning); }
+  .pill-high   { background: rgba(248,81,73,0.16); color: var(--error); }
+  .pill-pass   { background: rgba(63,185,80,0.14); color: var(--success); }
+  .pill-fail   { background: rgba(248,81,73,0.16); color: var(--error); }
+  .pill-info   { background: rgba(88,166,255,0.14); color: var(--accent); }
+
+  /* === Code === */
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #c9d1d9;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 12px 0 18px;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: var(--text); }
+  pre .lang-label {
+    display: inline-block;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  /* syntax classes */
+  .kw { color: #ff7b72; }
+  .str { color: #a5d6ff; }
+  .num { color: #79c0ff; }
+  .com { color: #8b949e; font-style: italic; }
+  .fn { color: #d2a8ff; }
+  .ty { color: #ffa657; }
+
+  /* === Callouts === */
+  .callout {
+    margin: 14px 0 18px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 4px solid;
+    background: var(--surface);
+    font-size: 13.5px;
+  }
+  .callout-info    { border-color: var(--accent);  background: rgba(88,166,255,0.06); }
+  .callout-success { border-color: var(--success); background: rgba(63,185,80,0.06); }
+  .callout-warning { border-color: var(--warning); background: rgba(210,153,34,0.06); }
+  .callout-error   { border-color: var(--error);   background: rgba(248,81,73,0.06); }
+  .callout-tip     { border-color: var(--purple);  background: rgba(188,140,255,0.06); }
+  .callout strong { color: var(--text); }
+
+  /* === Metric Cards === */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 14px 0 22px;
+  }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .metric-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-value.success { color: var(--success); }
+  .metric-value.warning { color: var(--warning); }
+  .metric-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* === Chart container === */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;
+    margin: 14px 0 22px;
+  }
+  @media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .chart-card h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .chart-canvas-wrap { position: relative; height: 220px; }
+
+  /* === Checklist === */
+  .checklist { list-style: none; padding: 0; margin: 12px 0 18px; }
+  .checklist li {
+    padding: 8px 0 8px 30px;
+    border-bottom: 1px solid var(--border-soft);
+    position: relative;
+    font-size: 14px;
+  }
+  .checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 12px;
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  /* === Inline lists === */
+  ul, ol { padding-left: 22px; }
+  ul li, ol li { margin: 4px 0; }
+
+  /* === Decision question block === */
+  .question {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--purple);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+  }
+  .question .q-tag {
+    display: inline-block;
+    background: rgba(188,140,255,0.14);
+    color: var(--purple);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .question .q-title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .question .q-body { color: var(--text-dim); font-size: 13.5px; }
+
+  /* === Back to top === */
+  .back-top {
+    position: fixed;
+    right: 24px; bottom: 24px;
+    width: 44px; height: 44px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, background 0.15s;
+    font-size: 18px;
+    z-index: 10;
+  }
+  .back-top.visible { opacity: 0.85; pointer-events: auto; }
+  .back-top:hover { opacity: 1; background: var(--accent-soft); border-color: var(--accent); }
+
+  /* === Print === */
+  @media print {
+    body { background: white; color: black; font-size: 11px; }
+    .toc-sidebar, .back-top { display: none; }
+    .layout { display: block; max-width: none; }
+    .content { padding: 12mm; max-width: none; }
+    a { color: inherit; text-decoration: underline; }
+    pre, table, .callout, .question { page-break-inside: avoid; }
+    h2, h3 { page-break-after: avoid; }
+    section { page-break-inside: auto; }
+    .metric, .callout, .chart-card, .question, table { background: white !important; border-color: #d0d7de !important; }
+    .metric-value, .metric-label, th, td, .toc-title { color: #1f2328 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="toc-title">목차</div>
+    <nav class="toc">
+      <ol>
+        <li><a href="#sec-1">Executive Summary</a></li>
+        <li><a href="#sec-2">Phase 1 산출물</a></li>
+        <li><a href="#sec-3">기능별 실증 결과 (F1–F9)</a></li>
+        <li><a href="#sec-4">커밋 내역</a></li>
+        <li><a href="#sec-5">Phase 4 후속 과제</a></li>
+        <li><a href="#sec-6">Phase 2 작업 분해</a></li>
+        <li><a href="#sec-7">Phase 2 위험과 완화</a></li>
+        <li><a href="#sec-8">Phase 2 수용 기준 (DoD)</a></li>
+        <li><a href="#sec-9">사용자 결정 필요 사항</a></li>
+        <li><a href="#sec-10">다음 단계</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <header class="report-header">
+      <h1>ClaudeSync Phase 1 완료 보고 및 Phase 2 진입 계획</h1>
+      <div class="report-meta">
+        <span>2026-05-05</span>
+        <span>·</span>
+        <span>main 브랜치</span>
+        <span class="badge badge-status-pass">Phase 1 ✅ 완료</span>
+        <span class="badge badge-status-pending">Phase 2 ⏳ 승인 대기</span>
+        <span class="badge">Generated by Claude Code</span>
+      </div>
+    </header>
+
+    <!-- ============ 1 ============ -->
+    <section id="sec-1">
+      <h2>1. Executive Summary</h2>
+      <p>ClaudeSync 프로젝트의 첫 번째 구현 단계인 <strong>Phase 1 (Xcode 스켈레톤 + MenuBarExtra 트레이 아이콘)</strong>을 완료했습니다. xcodegen 기반 빌드 시스템, SwiftUI MenuBarExtra 앱 셸, ProcessRunner / Logger 두 유틸리티가 동작하며 4개 스모크 테스트와 9가지 기능 실증을 모두 통과했습니다. 변경 사항은 콘벤셔널 커밋 스타일로 두 개 커밋(<code>chore</code>+<code>feat</code>)으로 main 브랜치에 반영되었으며, 원격 push는 사용자 승인 대기 중입니다.</p>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value success">✅</div>
+          <div class="metric-label">Clean Build</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value success">4/4</div>
+          <div class="metric-label">Unit Tests</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">9/9</div>
+          <div class="metric-label">기능 검증 (F1–F9)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">2</div>
+          <div class="metric-label">커밋 (main +2)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value warning">77.5MB</div>
+          <div class="metric-label">RSS (Debug, &gt;G4)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">~8h</div>
+          <div class="metric-label">Phase 2 추정</div>
+        </div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong>판정:</strong> Phase 1 완료. Phase 2 (SSH 키 관리 + 페어링 프로토콜) 진입 준비 완료. <a href="#sec-9" style="color:var(--accent);">§9</a>의 사용자 결정 4건이 해소되면 즉시 시작합니다.
+      </div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section id="sec-2">
+      <h2>2. Phase 1 산출물</h2>
+      <p>총 <strong>11개 파일</strong>이 새로 추가되었습니다. xcodegen 매니페스트 + 생성된 Xcode 프로젝트 + 8개 Swift 소스 + 2개 plist + 1개 테스트 파일.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>카테고리</th><th>파일</th><th class="num">라인</th><th>역할</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Build</td><td><code>project.yml</code></td><td class="num">~80</td><td>xcodegen 매니페스트 (Swift 6, macOS 15.0+, hardened runtime, no sandbox)</td></tr>
+            <tr><td>Build</td><td><code>ClaudeSync.xcodeproj/</code></td><td class="num">생성</td><td>project.pbxproj + xcshareddata/xcschemes/ClaudeSync.xcscheme</td></tr>
+            <tr><td>App</td><td><code>ClaudeSync/App/ClaudeSyncApp.swift</code></td><td class="num">16</td><td><code>@main</code> + <code>MenuBarExtra(.window)</code> + 상태별 SF Symbol</td></tr>
+            <tr><td>App</td><td><code>ClaudeSync/App/AppEnvironment.swift</code></td><td class="num">50</td><td><code>@Observable</code> DI 컨테이너 + <code>OverallStatus</code> (idle/discovering/connected/syncing/error)</td></tr>
+            <tr><td>UI</td><td><code>ClaudeSync/UI/MenuBarRootView.swift</code></td><td class="num">60</td><td>320pt 팝오버 (헤더/상태/Quit 버튼)</td></tr>
+            <tr><td>Util</td><td><code>ClaudeSync/Utilities/ProcessRunner.swift</code></td><td class="num">175</td><td>actor 기반 비동기 <code>Foundation.Process</code> wrapper, <code>run()</code> + <code>runStreaming()</code> + 취소</td></tr>
+            <tr><td>Util</td><td><code>ClaudeSync/Utilities/Logger.swift</code></td><td class="num">145</td><td><code>os.Logger</code> + 10MB 롤링 파일 sink (<code>~/.claudesync/logs/</code>)</td></tr>
+            <tr><td>Plist</td><td><code>ClaudeSync/Resources/Info.plist</code></td><td class="num">35</td><td><code>LSUIElement</code>, <code>NSBonjourServices=_claudesync._tcp</code>, <code>NSLocalNetworkUsageDescription</code>, macOS 15.0 min</td></tr>
+            <tr><td>Plist</td><td><code>ClaudeSync/Resources/ClaudeSync.entitlements</code></td><td class="num">13</td><td><code>app-sandbox=false</code>, network client/server, <code>cs.disable-library-validation</code></td></tr>
+            <tr><td>Test</td><td><code>ClaudeSyncTests/SmokeTests.swift</code></td><td class="num">50</td><td>4개 스모크 테스트 (AppEnvironment / ProcessRunner success+failure / Logger)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>핵심 설계 결정</h3>
+      <ul>
+        <li><strong>xcodegen 채택:</strong> .pbxproj를 손으로 관리하지 않기 위함. 단, xcodegen이 Info.plist/entitlements를 재생성하지 않도록 <code>info:</code>/<code>entitlements:</code> 디렉티브를 제거하고 <code>INFOPLIST_FILE</code> / <code>CODE_SIGN_ENTITLEMENTS</code> 빌드 세팅으로만 연결.</li>
+        <li><strong>NSLock 기반 LineBuffer:</strong> Swift 6 strict concurrency가 <code>Pipe.readabilityHandler</code> 클로저의 mutable <code>var buffer = Data()</code> 캡처를 거부. 클래스 + NSLock으로 Sendable 안전성 확보.</li>
+        <li><strong>로그 파일 위치 분리:</strong> 동기화 대상인 <code>~/.claude/</code>가 아닌 <code>~/.claudesync/logs/</code>를 사용. SyncTarget의 absolutelyExcluded 패턴과도 정합.</li>
+      </ul>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section id="sec-3">
+      <h2>3. 기능별 실증 결과 (F1–F9)</h2>
+      <p>HANDOFF의 Phase 1 acceptance criteria인 "메뉴바 아이콘 표시 확인"을 넘어, 빌드 시스템 / 컴파일 / 테스트 / 런타임 / 패키징 / 코드사인 / 종료 신호까지 9개 카테고리로 검증했습니다.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>검증 항목</th><th>명령</th><th>결과</th><th>비고</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>F1</td><td>Clean build</td><td><code>xcodebuild clean build -configuration Debug</code></td><td><span class="pill pill-pass">PASS</span></td><td>BUILD SUCCEEDED, 무해한 AppIntents 메타데이터 경고만</td></tr>
+            <tr><td>F2</td><td>Unit test suite</td><td><code>xcodebuild test</code></td><td><span class="pill pill-pass">4/4</span></td><td>0.001s + 0.527s + 0.015s + 0.015s = 0.558s</td></tr>
+            <tr><td>F3</td><td>Info.plist 키 감사</td><td><code>plutil -p</code></td><td><span class="pill pill-pass">PASS</span></td><td>LSUIElement / NSBonjourServices / NSLocalNetworkUsageDescription / LSMinimumSystemVersion=15.0 / CFBundleIdentifier 모두 존재</td></tr>
+            <tr><td>F4</td><td>임베디드 엔타이틀먼트</td><td><code>codesign -d --entitlements -</code></td><td><span class="pill pill-pass">PASS</span></td><td>app-sandbox / network.client / network.server / cs.disable-library-validation 4개 모두 임베드</td></tr>
+            <tr><td>F5</td><td>앱 번들 구조</td><td><code>find Contents/</code></td><td><span class="pill pill-pass">PASS</span></td><td>표준 .app 레이아웃</td></tr>
+            <tr><td>F6</td><td>런타임 영속성</td><td>fork & monitor 5s</td><td><span class="pill pill-pass">PASS</span></td><td>t=0/1/5s 모두 alive, RSS 77.5MB (Debug unwarmed)</td></tr>
+            <tr><td>F7a</td><td>로그 파일 자동 생성</td><td>tail log file</td><td><span class="pill pill-pass">PASS</span></td><td><code>~/.claudesync/logs/claudesync.log</code>에 ISO8601 타임스탬프로 "AppEnvironment initialized" 기록</td></tr>
+            <tr><td>F7b</td><td>SIGTERM 정상 종료</td><td><code>kill PID</code></td><td><span class="pill pill-pass">PASS</span></td><td>0.5s 이내 종료, 좀비 프로세스 없음</td></tr>
+            <tr><td>F8</td><td>코드 서명</td><td><code>codesign -dvv</code></td><td><span class="pill pill-info">AD-HOC</span></td><td>Debug 빌드 정상 — Phase 4에서 Developer ID 서명</td></tr>
+            <tr><td>F9</td><td>아키텍처</td><td><code>file MacOS/ClaudeSync</code></td><td><span class="pill pill-info">arm64</span></td><td>Universal binary 미설정 — Phase 4 후속</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>Test Result Breakdown</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartTests"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Phase 1 Verification Categories</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartCats"></canvas></div>
+        </div>
+      </div>
+
+      <pre><span class="lang-label">bash · F2 출력 발췌</span><code>Test Case '-[ClaudeSyncTests.SmokeTests testAppEnvironmentInitializesWithIdleStatus]' passed (0.001 seconds).
+Test Case '-[ClaudeSyncTests.SmokeTests testLoggerWritesToFile]' passed (0.527 seconds).
+Test Case '-[ClaudeSyncTests.SmokeTests testProcessRunnerEchoesStdout]' passed (0.015 seconds).
+Test Case '-[ClaudeSyncTests.SmokeTests testProcessRunnerSurfacesNonZeroExit]' passed (0.015 seconds).
+Test Suite 'SmokeTests' passed at 2026-05-05 14:46:14.508.
+** TEST SUCCEEDED **</code></pre>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section id="sec-4">
+      <h2>4. 커밋 내역</h2>
+      <p>2개 커밋으로 분리: 빌드 시스템(<code>chore</code>) + 소스/테스트(<code>feat</code>). 두 커밋 모두 <code>Co-Authored-By</code> trailer 포함, 콘벤셔널 커밋 스타일.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>SHA</th><th>유형</th><th>제목</th><th class="num">파일</th><th class="num">+/-</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>26dcfaa</code></td><td><span class="pill pill-info">chore</span></td><td>scaffold Xcode project via xcodegen</td><td class="num">4</td><td class="num">+748 / -0</td></tr>
+            <tr><td><code>6ec6b14</code></td><td><span class="pill pill-info">feat</span></td><td>add Phase 1 menu bar shell, ProcessRunner, and Logger</td><td class="num">12</td><td class="num">+676 / -1</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <pre><span class="lang-label">bash</span><code>$ git log --oneline -4
+6ec6b14 feat: add Phase 1 menu bar shell, ProcessRunner, and Logger
+26dcfaa chore: scaffold Xcode project via xcodegen
+48dbf84 docs: add PRD, Technical Spec, Tech References, Test Strategy, and Handoff
+ea711f2 Initial commit: ClaudeSync project setup
+
+$ git status
+브랜치 main, origin/main보다 2 커밋 앞섬 — 작업 폴더 깨끗함</code></pre>
+
+      <div class="callout callout-info">
+        <strong>Push 미실행:</strong> RULES.md 정책상 명시 승인 없이 push하지 않습니다. <a href="#sec-9" style="color:var(--accent);">§9-Q1</a> 참조.
+      </div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section id="sec-5">
+      <h2>5. Phase 4 후속 과제 (Phase 1 비차단)</h2>
+      <p>아래 4건은 Phase 1의 acceptance를 막지 않지만 Phase 4 (Hardening &amp; Release) 시점까지 해결되어야 할 항목입니다.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>항목</th><th>현재 상태</th><th>목표</th><th>해결 시점</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>RSS &lt; 50MB (PRD G4)</td>
+              <td>77.5 MB (Debug unwarmed)</td>
+              <td>Release 측정 후 PRD G4 만족 확인. 미달 시 ProMotion/Preview dylib 제거 등 검토.</td>
+              <td>Phase 4 W11 (Instruments)</td>
+            </tr>
+            <tr>
+              <td>Assets.car</td>
+              <td>미생성 (AppIcon/AccentColor 비어 있음)</td>
+              <td>실제 AppIcon (16/32/128/256/512 + @2x), AccentColor 정의</td>
+              <td>Phase 4 W12 (Distribution packaging)</td>
+            </tr>
+            <tr>
+              <td>Universal binary</td>
+              <td>arm64 only</td>
+              <td><code>ARCHS = arm64 x86_64</code> 추가, x86_64 빌드 검증</td>
+              <td>Phase 4 W12</td>
+            </tr>
+            <tr>
+              <td>코드 서명</td>
+              <td>ad-hoc (<code>Signature=adhoc</code>)</td>
+              <td>Developer ID Application 서명 + notarytool 공증</td>
+              <td>Phase 4 W12</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section id="sec-6">
+      <h2>6. Phase 2 작업 분해</h2>
+      <p>HANDOFF Phase 2 항목(SSHKeyManager / PairingManager / Remote Login preflight / FirstLaunchPairingView)을 TECHNICAL_SPEC §5 (Pairing Protocol), §10 (Security/SSHKeyManager), PRD FR-00/00b/03과 대조해 5개 작업 단위로 분해.</p>
+
+      <h3>의존성 그래프</h3>
+      <pre><span class="lang-label">depgraph</span><code>2.1 PairingCodeGenerator   ── 의존성 없음 (CryptoKit only)
+        │
+        ▼
+2.2 RemoteLoginPreflight      2.3 SSHKeyManager
+    + FullDiskAccessChecker          (uses ProcessRunner ✓)
+    (uses ProcessRunner ✓)
+        │                              │
+        └────────────┬─────────────────┘
+                     ▼
+            2.4 PairingManager
+                (state machine + ControlMessage codec
+                 + PeerChannel protocol abstraction)
+                     │
+                     ▼
+            2.5 FirstLaunchPairingView
+                (welcome → preflight → code → 완료
+                 + AppEnvironment routing)</code></pre>
+
+      <h3>작업 단위 명세</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>작업</th><th class="num">추정</th><th>위험</th><th>참조 스펙</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2.1</td>
+              <td><strong>PairingCodeGenerator</strong> — CryptoKit SHA-256(initiator || responder pubkey) → 6자리 십진수. 4개 테스트 (same-keys / MITM / 6자리 / order-matters).</td>
+              <td class="num">0.5h</td>
+              <td><span class="pill pill-low">LOW</span></td>
+              <td>TECHNICAL_SPEC §5 L707-734<br>TEST_STRATEGY §2.4</td>
+            </tr>
+            <tr>
+              <td>2.2</td>
+              <td><strong>RemoteLoginPreflight + FullDiskAccessChecker</strong> — <code>SSHConnectivityChecker</code> 프로토콜 + 실 구현(<code>ssh -o BatchMode=yes -o ConnectTimeout=5</code>) + canary file 접근으로 FDA 확인 + 시스템 설정 딥링크 URL.</td>
+              <td class="num">1h</td>
+              <td><span class="pill pill-medium">LOW-MED</span></td>
+              <td>PRD FR-00 (L139-148)<br>PRD FR-00b (L150-159)</td>
+            </tr>
+            <tr>
+              <td>2.3</td>
+              <td><strong>SSHKeyManager actor</strong> — <code>~/.claudesync/ssh/id_claudesync</code> Ed25519 생성(0600), readPublicKey, publicKeyFingerprint, install/removePeerKey(<code>restrict,command="rsync --server …"</code>), verifyKeyIntegrity. <code>homeDirectoryURL</code> 주입 가능.</td>
+              <td class="num">2h</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td>TECHNICAL_SPEC §10 L1670-1798</td>
+            </tr>
+            <tr>
+              <td>2.4</td>
+              <td><strong>PairingManager 상태머신</strong> — idle → awaitingDiscovery → codeDisplayed → waitingPeerAccept/awaitingLocalAccept → exchangingKeys → verifyingConnection → completed/failed/rejected. ControlMessage Codec + <code>PeerChannel</code> 프로토콜 + MockPeerChannel.</td>
+              <td class="num">3h</td>
+              <td><span class="pill pill-high">HIGH</span></td>
+              <td>TECHNICAL_SPEC §5 L745-801<br>TECHNICAL_SPEC §3 L626-689</td>
+            </tr>
+            <tr>
+              <td>2.5</td>
+              <td><strong>FirstLaunchPairingView</strong> — SwiftUI 온보딩 플로우 5스텝 (Welcome / Remote Login preflight / FDA preflight / Wait for peer / Display code &amp; accept). <code>AppEnvironment.needsOnboarding</code> 라우팅, <code>WindowGroup</code> scene 추가.</td>
+              <td class="num">2h</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td>PRD FR-03 (L186-196)<br>TECH_REFERENCES §1 (MenuBarExtra + WindowGroup 패턴)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>총 추정:</strong> 8.5h. 2.2와 2.3은 의존성 없이 병렬 가능.</p>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section id="sec-7">
+      <h2>7. Phase 2 위험과 완화</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>위험</th><th>심각도</th><th>완화책</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>테스트가 실제 <code>~/.ssh/authorized_keys</code>를 변조할 가능성</td>
+              <td><span class="pill pill-high">HIGH</span></td>
+              <td>SSHKeyManager init에 <code>homeDirectoryURL: URL</code> 주입. 모든 테스트는 <code>FileManager.default.temporaryDirectory.appending(...)</code> 사용. 실제 <code>NSHomeDirectory()</code>는 production 코드 경로에서만 호출.</td>
+            </tr>
+            <tr>
+              <td>Preflight 단위테스트가 실제 sshd 의존</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td><code>SSHConnectivityChecker</code> 프로토콜 도입(TEST_STRATEGY §4 L635-642). 단위테스트는 <code>MockSSHChecker</code>로 ok/timeout/refused 케이스 직접 주입. 통합테스트만 실제 ssh 실행.</td>
+            </tr>
+            <tr>
+              <td>PairingManager가 Phase 3 PeerDiscovery에 종속</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td><code>PeerChannel</code> 프로토콜로 NWConnection 추상화. PairingManager는 프로토콜만 의존. <code>MockPeerChannel</code>로 단위테스트 전체 커버. 실제 <code>NWConnectionPeerChannel</code> 구현은 Phase 3에서 합류.</td>
+            </tr>
+            <tr>
+              <td>FirstLaunchPairingView가 Phase 2 종료 시점에 풀 E2E 페어링 시연 불가</td>
+              <td><span class="pill pill-low">LOW</span></td>
+              <td>Phase 2는 "peer 대기 화면"까지 출하. 코드 표시 / 수락 UI는 mock-peer 기반 SwiftUI Preview + 단위테스트로 검증. 실기 페어링 시연은 Phase 3 Bonjour 합류 직후.</td>
+            </tr>
+            <tr>
+              <td><code>/usr/bin/ssh-keygen</code> 부재 / PATH 문제</td>
+              <td><span class="pill pill-low">LOW</span></td>
+              <td>SSHKeyManager init에서 <code>FileManager.fileExists</code>로 검증. 부재 시 명확한 에러 enum (<code>SSHKeyError.toolMissing</code>) 표면화.</td>
+            </tr>
+            <tr>
+              <td>Strict concurrency: <code>FSEventStreamCallback</code> C 콜백 → actor 브리지</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td>Phase 2 직접 위험은 아니지만 Phase 4(FileWatcher) 사전 학습 필요. ProcessRunner의 NSLock LineBuffer 패턴 재활용 가능.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section id="sec-8">
+      <h2>8. Phase 2 수용 기준 (DoD)</h2>
+      <ul class="checklist">
+        <li>PairingCodeGenerator 4개 테스트 통과, 100% 커버리지 (TEST_STRATEGY §8 security-critical 정책)</li>
+        <li>SSHKeyManager: 임시 홈 디렉터리에서 Ed25519 키 생성 → 권한 0600 검증 → install / remove 라운드트립 테스트 통과</li>
+        <li>RemoteLoginPreflight: <code>MockSSHChecker</code>로 ok / connectionTimeout / connectionRefused / hostUnreachable 4가지 케이스 테스트 통과</li>
+        <li>FullDiskAccessChecker: 정상/거부 두 케이스 모킹 가능한 구조 (canary 경로 주입)</li>
+        <li>PairingManager: 정상 흐름 (initiate → code → accept → keyExchange → complete) + reject 분기 + timeout 분기 + double-pair 거부 시나리오 테스트</li>
+        <li>FirstLaunchPairingView: welcome / preflight / code-display 화면 SwiftUI Preview 정상, "Open System Settings" 딥링크가 <code>x-apple.systempreferences:</code> URL 발행 검증</li>
+        <li>Phase 2 신규 테스트가 Phase 1 스모크 4개와 함께 단일 <code>xcodebuild test</code>로 모두 PASS</li>
+        <li>빌드가 Swift 6 strict concurrency + hardened runtime 설정으로 여전히 BUILD SUCCEEDED</li>
+        <li>HANDOFF.md에 Phase 2 완료 내역 + Phase 3 진입 가이드 업데이트</li>
+      </ul>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section id="sec-9">
+      <h2>9. 사용자 결정 필요 사항</h2>
+      <p>Phase 2 GO 신호 전에 4건 결정이 필요합니다.</p>
+
+      <div class="question">
+        <span class="q-tag">Q1 · Push</span>
+        <div class="q-title"><code>git push origin main</code> 진행 가능?</div>
+        <div class="q-body">현재 main이 origin/main보다 2 커밋 앞섬. RULES.md 정책상 명시 승인 없이 push하지 않습니다. <strong>승인</strong> / <strong>보류 (Phase 2 후 일괄 push)</strong> 중 선택.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q2 · FDA Canary</span>
+        <div class="q-title">Full Disk Access 프리플라이트 canary 경로 선택</div>
+        <div class="q-body">TECHNICAL_SPEC은 "protected path canary file access test"로만 명시. 후보:
+          <ul>
+            <li><strong>(a)</strong> <code>~/Library/Mail/V*</code> 디렉터리 listing — Mail 사용자만 의미 있음</li>
+            <li><strong>(b)</strong> <code>~/Library/Cookies/</code> listing — 항상 존재, FDA 필요, 권장</li>
+            <li><strong>(c)</strong> <code>~/Library/Application Support/com.apple.TCC/TCC.db</code> 읽기 시도 — 가장 강력하지만 SIP 영역</li>
+          </ul>
+          기본 추천: <strong>(b) Cookies</strong>. 다른 선택 또는 추가 후보 있으시면 알려주세요.
+        </div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q3 · Phase 2 종료 시점 시연 범위</span>
+        <div class="q-title">PairingManager가 mock 기반으로 출하되는 트레이드오프 수용?</div>
+        <div class="q-body">옵션:
+          <ul>
+            <li><strong>(A) 권장:</strong> Phase 2는 mock-peer 기반 출하. 실기 페어링 시연은 Phase 3 (Bonjour) 합류 직후. 위험 분리 / 진행 빠름.</li>
+            <li><strong>(B) 대안:</strong> Phase 2와 Phase 3 동시 진행 → 출하 시점에 실기 페어링까지 시연. 일정 +5–7일, 위험 동시 노출.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q4 · GO 신호</span>
+        <div class="q-title">Phase 2 시작 신호</div>
+        <div class="q-body">Q1–Q3 결정 후 "Phase 2 GO" 또는 추가 조정 사항 알려주시면 즉시 2.1 작업부터 착수합니다.</div>
+      </div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="sec-10">
+      <h2>10. 다음 단계</h2>
+      <p>Phase 2 GO 시점부터의 작업 순서 (병렬화 포함):</p>
+      <pre><span class="lang-label">timeline</span><code>Day 1 morning  ┃ 2.1 PairingCodeGenerator (0.5h)
+                ┃   └ TEST_STRATEGY §2.4 4개 테스트 작성 → 100% 커버리지 확인
+                ┃
+Day 1 afternoon ┃ 2.2 RemoteLoginPreflight + FDA  ─┐
+                ┃                                   ├─ 병렬 가능
+                ┃ 2.3 SSHKeyManager actor          ─┘
+                ┃   └ 임시 홈디렉터리에서 Ed25519 라운드트립
+                ┃
+Day 2 morning   ┃ 2.4 PairingManager 상태머신 (3h)
+                ┃   └ 정상/reject/timeout 시나리오 + MockPeerChannel
+                ┃
+Day 2 afternoon ┃ 2.5 FirstLaunchPairingView SwiftUI 플로우 (2h)
+                ┃   └ AppEnvironment routing + WindowGroup scene
+                ┃
+Day 2 EOD       ┃ HTML 보고서 갱신 → Phase 2 완료 보고</code></pre>
+
+      <p>각 작업 단위 완료 시 단위테스트 실행 + Git 커밋(콘벤셔널 스타일)을 거치며, Phase 2 종료 시점에 본 보고서와 동일한 형식의 HTML 보고서를 생성하여 사용자 검토를 요청합니다.</p>
+
+      <div class="callout callout-tip">
+        <strong>준비 완료 신호:</strong> 본 보고서가 작성된 시점부터 Phase 2 진입 대기 상태입니다. §9의 4가지 결정만 알려주시면 즉시 2.1부터 착수합니다.
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="back-top" id="backTop" aria-label="맨 위로" title="맨 위로">↑</button>
+
+<script>
+  // === TOC active state via IntersectionObserver ===
+  (function() {
+    const links = document.querySelectorAll('.toc a');
+    const sections = Array.from(document.querySelectorAll('section[id]'));
+    const linkMap = new Map();
+    links.forEach(a => linkMap.set(a.getAttribute('href').slice(1), a));
+
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const id = entry.target.id;
+        const link = linkMap.get(id);
+        if (!link) return;
+        if (entry.isIntersecting) {
+          links.forEach(l => l.classList.remove('active'));
+          link.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
+
+    sections.forEach(s => obs.observe(s));
+  })();
+
+  // === Back to top button ===
+  (function() {
+    const btn = document.getElementById('backTop');
+    window.addEventListener('scroll', () => {
+      btn.classList.toggle('visible', window.scrollY > 400);
+    }, { passive: true });
+    btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  })();
+
+  // === Charts ===
+  (function() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.color = '#8b949e';
+    Chart.defaults.borderColor = '#30363d';
+    Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+
+    new Chart(document.getElementById('chartTests'), {
+      type: 'doughnut',
+      data: {
+        labels: ['AppEnvironment init', 'Logger file write', 'ProcessRunner echo', 'ProcessRunner exit-42'],
+        datasets: [{
+          data: [0.001, 0.527, 0.015, 0.015],
+          backgroundColor: ['#3fb950','#58a6ff','#bc8cff','#d29922'],
+          borderColor: '#0d1117',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed}s` } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('chartCats'), {
+      type: 'bar',
+      data: {
+        labels: ['Build', 'Test', 'Plist', 'Entitlement', 'Bundle', 'Runtime', 'Log', 'Shutdown', 'Sign/Arch'],
+        datasets: [{
+          label: 'PASS',
+          data: [1, 1, 1, 1, 1, 1, 1, 1, 1],
+          backgroundColor: '#3fb950',
+          borderRadius: 4,
+          barThickness: 18
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+          x: { display: false, max: 1, grid: { display: false } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+      }
+    });
+  })();
+</script>
+</body>
+</html>

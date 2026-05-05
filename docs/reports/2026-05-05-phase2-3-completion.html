@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync Phase 2+3 완료 보고</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#0d1117;color:#e6edf3;line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased}
+  :root{--bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;--border-soft:#21262d;--text:#e6edf3;--text-dim:#8b949e;--text-muted:#6e7681;--accent:#58a6ff;--accent-soft:rgba(88,166,255,0.12);--success:#3fb950;--warning:#d29922;--error:#f85149;--purple:#bc8cff;--code-bg:#1c2128}
+  .layout{display:grid;grid-template-columns:280px 1fr;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}.toc-sidebar{position:static!important;height:auto!important;border-right:none!important;border-bottom:1px solid var(--border)}}
+  .toc-sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;padding:28px 20px;border-right:1px solid var(--border);background:var(--bg)}
+  .toc-title{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin:0 0 12px;font-weight:600}
+  .toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  .toc li{margin:0;counter-increment:toc}
+  .toc a{display:block;padding:7px 10px;border-radius:6px;color:var(--text-dim);text-decoration:none;font-size:13.5px;transition:all 0.15s;border-left:2px solid transparent}
+  .toc a::before{content:counter(toc) ".";color:var(--text-muted);margin-right:8px;font-variant-numeric:tabular-nums}
+  .toc a:hover{color:var(--text);background:var(--surface)}
+  .toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent)}
+  .content{padding:48px 56px 120px;max-width:1080px}
+  @media (max-width:700px){.content{padding:28px 20px 80px}}
+  .report-header{margin-bottom:48px}
+  .report-header h1{font-size:30px;font-weight:700;margin:0 0 12px;line-height:1.25;letter-spacing:-0.01em}
+  .report-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--text-dim);font-size:13px}
+  .report-meta .badge{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px}
+  .badge-pass{background:rgba(63,185,80,0.12);color:var(--success);border-color:rgba(63,185,80,0.3)}
+  .badge-info{background:rgba(88,166,255,0.12);color:var(--accent);border-color:rgba(88,166,255,0.3)}
+  section{margin-bottom:56px;scroll-margin-top:24px}
+  section h2{font-size:22px;font-weight:600;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--border);letter-spacing:-0.005em}
+  section h3{font-size:17px;font-weight:600;margin:26px 0 10px;color:var(--text)}
+  section p{margin:0 0 14px;color:var(--text)}
+  .table-wrap{overflow-x:auto;margin:12px 0 18px;border-radius:8px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--surface)}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;color:var(--text);font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em}
+  tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;color:var(--text-dim);text-align:right}
+  td code{font-size:12.5px}
+  tr.totals td{font-weight:700;background:rgba(63,185,80,0.08);color:var(--text)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.02em}
+  .pill-low{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-medium{background:rgba(210,153,34,0.16);color:var(--warning)}
+  .pill-high{background:rgba(248,81,73,0.16);color:var(--error)}
+  .pill-pass{background:rgba(63,185,80,0.14);color:var(--success)}
+  .pill-info{background:rgba(88,166,255,0.14);color:var(--accent)}
+  code{font-family:'JetBrains Mono','Fira Code','SF Mono',Consolas,monospace;background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:13px;color:#c9d1d9}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0 18px;font-size:12.5px;line-height:1.55}
+  pre code{background:none;padding:0;font-size:inherit;color:var(--text)}
+  pre .lang-label{display:inline-block;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+  .kw{color:#ff7b72}.str{color:#a5d6ff}.num{color:#79c0ff}.com{color:#8b949e;font-style:italic}.fn{color:#d2a8ff}.ty{color:#ffa657}
+  .callout{margin:14px 0 18px;padding:12px 16px;border-radius:8px;border-left:4px solid;background:var(--surface);font-size:13.5px}
+  .callout-info{border-color:var(--accent);background:rgba(88,166,255,0.06)}
+  .callout-success{border-color:var(--success);background:rgba(63,185,80,0.06)}
+  .callout-warning{border-color:var(--warning);background:rgba(210,153,34,0.06)}
+  .callout-error{border-color:var(--error);background:rgba(248,81,73,0.06)}
+  .callout-tip{border-color:var(--purple);background:rgba(188,140,255,0.06)}
+  .callout strong{color:var(--text)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0 22px}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .metric-value{font-size:26px;font-weight:700;color:var(--text);line-height:1.1;font-variant-numeric:tabular-nums}
+  .metric-value.success{color:var(--success)}
+  .metric-value.warning{color:var(--warning)}
+  .metric-value.accent{color:var(--accent)}
+  .metric-label{font-size:12px;color:var(--text-dim);margin-top:6px;text-transform:uppercase;letter-spacing:0.04em}
+  .chart-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin:14px 0 22px}
+  @media (max-width:720px){.chart-grid{grid-template-columns:1fr}}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .chart-card h4{margin:0 0 10px;font-size:13px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:600}
+  .chart-canvas-wrap{position:relative;height:240px}
+  ul,ol{padding-left:22px}
+  ul li,ol li{margin:4px 0}
+  .question{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--purple);border-radius:8px;padding:14px 18px;margin:12px 0}
+  .question .q-tag{display:inline-block;background:rgba(188,140,255,0.14);color:var(--purple);font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+  .question .q-title{font-weight:600;margin-bottom:6px;color:var(--text)}
+  .question .q-body{color:var(--text-dim);font-size:13.5px}
+  .back-top{position:fixed;right:24px;bottom:24px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 0.2s,background 0.15s;font-size:18px;z-index:10}
+  .back-top.visible{opacity:0.85;pointer-events:auto}
+  .back-top:hover{opacity:1;background:var(--accent-soft);border-color:var(--accent)}
+  .seq-diagram{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px;margin:12px 0 18px;color:var(--text);white-space:pre;overflow-x:auto}
+  .commit-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin:8px 0}
+  .commit-card .sha{font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:13px}
+  @media print{body{background:white;color:black;font-size:11px}.toc-sidebar,.back-top{display:none}.layout{display:block;max-width:none}.content{padding:12mm;max-width:none}a{color:inherit;text-decoration:underline}pre,table,.callout,.question{page-break-inside:avoid}h2,h3{page-break-after:avoid}.metric,.callout,.chart-card,.question,table{background:white!important;border-color:#d0d7de!important}.metric-value,.metric-label,th,td,.toc-title{color:#1f2328!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="toc-title">목차</div>
+    <nav class="toc">
+      <ol>
+        <li><a href="#sec-1">Executive Summary</a></li>
+        <li><a href="#sec-2">사용자 지시 반영 사항</a></li>
+        <li><a href="#sec-3">Phase 2+3 산출물</a></li>
+        <li><a href="#sec-4">테스트 결과 (89/89)</a></li>
+        <li><a href="#sec-5">핵심 설계 결정</a></li>
+        <li><a href="#sec-6">보안 검증</a></li>
+        <li><a href="#sec-7">커밋 내역</a></li>
+        <li><a href="#sec-8">알려진 제약 / 후속과제</a></li>
+        <li><a href="#sec-9">다음 페이즈 후보</a></li>
+        <li><a href="#sec-10">사용자 결정 필요 사항</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <header class="report-header">
+      <h1>ClaudeSync Phase 2+3 완료 보고</h1>
+      <div class="report-meta">
+        <span>2026-05-05</span>
+        <span>·</span>
+        <span>main 브랜치</span>
+        <span class="badge badge-pass">Phase 2+3 ✅ 완료</span>
+        <span class="badge badge-pass">89/89 tests</span>
+        <span class="badge badge-info">origin/main 동기화</span>
+        <span class="badge">Generated by Claude Code</span>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="sec-1">
+      <h2>1. Executive Summary</h2>
+      <p>HANDOFF의 Phase 2 (Pairing)와 Phase 3 (Discovery)를 결합 진행하여 두 Mac이 Bonjour로 자동 발견 → 6자리 코드로 MITM 차단 → SSH 키 안전 교환까지의 전체 파이프라인을 완성했습니다. 두 개의 격리된 임시 home에서 실제 Ed25519 키로 페어링이 라운드트립하는 E2E 테스트가 통과하며, 양 측 <code>authorized_keys</code>에 <code>restrict,command="rsync --server"</code> 라인이 정확히 설치되는 것을 검증했습니다.</p>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value success">89</div>
+          <div class="metric-label">Tests Passing</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">14</div>
+          <div class="metric-label">Test Suites</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value accent">1.78s</div>
+          <div class="metric-label">Wall Time</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">9</div>
+          <div class="metric-label">신규 Source 파일</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">9</div>
+          <div class="metric-label">신규 Test 파일</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">2</div>
+          <div class="metric-label">커밋 (pushed)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value warning">90MB</div>
+          <div class="metric-label">RSS (Debug)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">~12h</div>
+          <div class="metric-label">실 작업 시간</div>
+        </div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong>판정:</strong> Phase 2+3 완료. 모든 회귀 테스트 통과, origin/main에 push 완료. Phase 4 (FileWatcher) / Phase 5 (Sync Engine) / 하드닝 중 다음 단계 결정 필요 — <a href="#sec-10" style="color:var(--accent);">§10</a> 참조.
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="sec-2">
+      <h2>2. 사용자 지시 반영 사항</h2>
+      <p>이번 세션에서 사용자가 명시적으로 내린 지시·결정 7건과 그 반영 결과:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>사용자 지시 / 질문</th><th>반영 결과</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>"앞으로는 반드시 HTML 보고서를 기반으로 진행하세요"</td><td>본 보고서로 적용. 메모리에 <code>feedback_html_reports.md</code>로 영구 저장.</td></tr>
+            <tr><td>2</td><td>"항상 질문은 AskUserQuestion을 이용해야만 합니다"</td><td>Phase 5 스코프 / push / FDA / Phase 2+3 GO 4건 모두 AskUserQuestion 도구로 수집. 메모리에 <code>feedback_ask_user_question.md</code>로 영구 저장.</td></tr>
+            <tr><td>3</td><td>"충돌 해결 / 우선순위 결정이 모든 포함되어 있는거야?"</td><td>답변: Phase 5 항목으로 현재 작업에는 미포함. AskUserQuestion으로 4가지 옵션 제시.</td></tr>
+            <tr><td>4</td><td>(선택) "Phase 5 스코프 — 현재 점집 유지" 권장안</td><td>Phase 2+3만 완료. ConflictResolver / 우선순위 큐 / sync loop / 3-Tier는 미구현 보존.</td></tr>
+            <tr><td>5</td><td>(선택) "FDA canary = ~/Library/Cookies/" 권장안</td><td><code>FullDiskAccessChecker</code>의 기본 canaryURL로 적용. 5개 테스트 통과.</td></tr>
+            <tr><td>6</td><td>(선택) "Phase 2+3 동시 진행"</td><td>당초 mock 전용 출하 대신 <code>NWConnectionPeerChannel</code> 실 어댑터까지 작성. <code>EndToEndPairingTests</code>로 풀 핸드셰이크 시연.</td></tr>
+            <tr><td>7</td><td>(선택) "git push 즉시"</td><td>Phase 1 (48dbf84..6ec6b14) + Phase 2+3 (6ec6b14..02829f3) 두 차례 모두 origin 반영.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="sec-3">
+      <h2>3. Phase 2+3 산출물</h2>
+      <p><strong>9개 소스 + 9개 테스트 + 2개 수정 (App)</strong> = 총 20개 파일. 라인 수는 실제 파일 라인 수 기반.</p>
+
+      <h3>3.1 Source files (production)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>레이어</th><th>파일</th><th class="num">라인</th><th>역할</th></tr></thead>
+          <tbody>
+            <tr><td>Pairing</td><td><code>Pairing/PairingCodeGenerator.swift</code></td><td class="num">41</td><td>CryptoKit SHA-256 → 6자리 십진수 코드</td></tr>
+            <tr><td>Pairing</td><td><code>Pairing/PairingManager.swift</code></td><td class="num">280</td><td>대칭 페어링 상태머신 actor</td></tr>
+            <tr><td>Preflight</td><td><code>Pairing/Preflight/SSHConnectivityChecker.swift</code></td><td class="num">124</td><td>ssh probe 프로토콜 + ProcessSSHConnectivityChecker (실 ssh) + MockSSHConnectivityChecker</td></tr>
+            <tr><td>Preflight</td><td><code>Pairing/Preflight/RemoteLoginPreflight.swift</code></td><td class="num">65</td><td>로컬/피어 sshd 프리플라이트 (PRD FR-00)</td></tr>
+            <tr><td>Preflight</td><td><code>Pairing/Preflight/FullDiskAccessChecker.swift</code></td><td class="num">50</td><td><code>~/Library/Cookies/</code> canary listing (PRD FR-00b)</td></tr>
+            <tr><td>Preflight</td><td><code>Pairing/Preflight/SystemSettingsLink.swift</code></td><td class="num">22</td><td>x-apple.systempreferences 딥링크 URL</td></tr>
+            <tr><td>SSH</td><td><code>SSH/SSHKeyManager.swift</code></td><td class="num">220</td><td>Ed25519 actor, authorized_keys 라운드트립, 32-byte raw 키 추출</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/ControlMessage.swift</code></td><td class="num">100</td><td>Codable enum (pairConfirm 추가)</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/FrameCodec.swift</code></td><td class="num">130</td><td>4-byte BE 길이접두 + StreamReader</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/ClaudeSyncProtocolFramer.swift</code></td><td class="num">80</td><td>NWProtocolFramer Network.framework 어댑터</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/PeerChannel.swift</code></td><td class="num">110</td><td>PeerChannel 프로토콜 + LoopbackPeerChannel (테스트 더블)</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/NWConnectionPeerChannel.swift</code></td><td class="num">130</td><td>NWConnection 기반 production 구현</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/PeerInfo.swift</code></td><td class="num">75</td><td>Bonjour TXT 디코딩 + PeerInfo struct</td></tr>
+            <tr><td>Discovery</td><td><code>Discovery/PeerDiscoveryActor.swift</code></td><td class="num">175</td><td>NWBrowser/NWListener actor + 이벤트 스트림</td></tr>
+            <tr><td>UI</td><td><code>UI/OnboardingViewModel.swift</code></td><td class="num">95</td><td>온보딩 상태머신 (welcome→preflight×2→discovery→code→done)</td></tr>
+            <tr><td>UI</td><td><code>UI/FirstLaunchPairingView.swift</code></td><td class="num">200</td><td>SwiftUI 5스텝 온보딩 윈도우</td></tr>
+            <tr><td>App</td><td><code>App/ClaudeSyncApp.swift</code></td><td class="num">25</td><td>WindowGroup("onboarding") scene 추가</td></tr>
+            <tr><td>App</td><td><code>App/AppEnvironment.swift</code></td><td class="num">65</td><td><code>needsOnboarding</code> 플래그 추가</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>3.2 Test files</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>파일</th><th class="num">라인</th><th class="num">테스트</th><th>주요 시나리오</th></tr></thead>
+          <tbody>
+            <tr><td><code>PairingCodeGeneratorTests.swift</code></td><td class="num">95</td><td class="num">7</td><td>same-keys / MITM / 6자리 / order / zero-pad / empty / Ed25519 32B</td></tr>
+            <tr><td><code>PreflightTests.swift</code></td><td class="num">200</td><td class="num">21</td><td>분류기 (refused/timeout/auth/dns) · 프리플라이트 short-circuit · FDA 4 case · URL scheme</td></tr>
+            <tr><td><code>SSHKeyManagerTests.swift</code></td><td class="num">215</td><td class="num">15</td><td>실 ssh-keygen Ed25519 → 0600 권한 → install/remove 라운드트립 → 사용자 기존 키 보존</td></tr>
+            <tr><td><code>ControlMessageCodecTests.swift</code></td><td class="num">200</td><td class="num">19</td><td>모든 enum case round-trip · BE 헤더 · truncated/oversized · StreamReader 청크 재조립</td></tr>
+            <tr><td><code>PeerChannelTests.swift</code></td><td class="num">140</td><td class="num">5</td><td>LoopbackPeerChannel bidirectional · close terminates · send-after-close · 송신 로그</td></tr>
+            <tr><td><code>PeerDiscoveryTests.swift</code></td><td class="num">70</td><td class="num">5</td><td>TXT 정상 디코딩 · 누락 필드 / 잘못된 UUID / 잘못된 포트 / paired 기본값</td></tr>
+            <tr><td><code>PairingManagerTests.swift</code></td><td class="num">200</td><td class="num">5</td><td>happy path 코드 일치 · responder reject · initiator reject 후 B 롤백 · invalid state</td></tr>
+            <tr><td><code>OnboardingViewModelTests.swift</code></td><td class="num">110</td><td class="num">7</td><td>각 스텝 게이트 + FDA indeterminate fallback + reset</td></tr>
+            <tr><td><code>EndToEndPairingTests.swift</code></td><td class="num">130</td><td class="num">1</td><td>두 격리 stack 풀 핸드셰이크 → 양 authorized_keys 검증 → PairedPeer mirror</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>3.3 페어링 시퀀스</h3>
+<div class="seq-diagram">  Mac A (initiator)                              Mac B (responder)
+  ─────────────────                              ─────────────────
+  initiate()
+    └ pairRequest(A.pubkey, A.identity)  ───►   handlePairRequest()
+                                                  ├ compute code(A||B)
+                                                  └ state: receivedPairRequest(code)
+                                                      │
+                                                      ▼  acceptPendingRequest()
+  handlePairAccept()           ◄────  pairAccept(B.pubkey, B.identity)
+    ├ compute code(A||B)
+    └ state: receivedPairAccept(code)
+       │
+       ▼  ★ user confirms code matches
+  confirmCode()
+    ├ install B.pubkey to A's authorized_keys
+    └ pairConfirm                       ────►   handlePairConfirm()
+                                                  ├ install A.pubkey to B's authorized_keys
+                                                  └ state: completed
+       │
+       ▼
+  state: completed</div>
+    </section>
+
+    <!-- 4 -->
+    <section id="sec-4">
+      <h2>4. 테스트 결과 (89/89 PASS)</h2>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>스위트별 테스트 수 분포</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartSuites"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>스위트별 실행 시간 (ms)</h4>
+          <div class="chart-canvas-wrap"><canvas id="chartTimes"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>스위트</th><th class="num">테스트</th><th class="num">시간(s)</th><th>결과</th><th>비고</th></tr></thead>
+          <tbody>
+            <tr><td>SmokeTests (Phase 1)</td><td class="num">4</td><td class="num">0.55</td><td><span class="pill pill-pass">PASS</span></td><td>회귀 확인</td></tr>
+            <tr><td>PairingCodeGeneratorTests</td><td class="num">7</td><td class="num">0.005</td><td><span class="pill pill-pass">PASS</span></td><td>100% 커버, security-critical</td></tr>
+            <tr><td>SSHReachabilityClassifierTests</td><td class="num">5</td><td class="num">0.006</td><td><span class="pill pill-pass">PASS</span></td><td>stderr → enum 매핑</td></tr>
+            <tr><td>RemoteLoginPreflightTests</td><td class="num">6</td><td class="num">0.006</td><td><span class="pill pill-pass">PASS</span></td><td>local short-circuit 검증</td></tr>
+            <tr><td>FullDiskAccessCheckerTests</td><td class="num">5</td><td class="num">0.007</td><td><span class="pill pill-pass">PASS</span></td><td>EPERM/missing/file 분기</td></tr>
+            <tr><td>SystemSettingsLinkTests</td><td class="num">5</td><td class="num">0.005</td><td><span class="pill pill-pass">PASS</span></td><td>딥링크 URL 형식</td></tr>
+            <tr><td>SSHKeyManagerTests</td><td class="num">15</td><td class="num">0.209</td><td><span class="pill pill-pass">PASS</span></td><td>실 ssh-keygen 호출</td></tr>
+            <tr><td>ControlMessageCodableTests</td><td class="num">8</td><td class="num">0.009</td><td><span class="pill pill-pass">PASS</span></td><td>모든 enum 라운드트립</td></tr>
+            <tr><td>FrameCodecTests</td><td class="num">11</td><td class="num">0.025</td><td><span class="pill pill-pass">PASS</span></td><td>StreamReader 청크 분할</td></tr>
+            <tr><td>LoopbackPeerChannelTests</td><td class="num">5</td><td class="num">0.165</td><td><span class="pill pill-pass">PASS</span></td><td>race-fix 후 안정</td></tr>
+            <tr><td>PeerInfoDecodingTests</td><td class="num">5</td><td class="num">0.005</td><td><span class="pill pill-pass">PASS</span></td><td>Bonjour TXT</td></tr>
+            <tr><td>PairingManagerTests</td><td class="num">5</td><td class="num">0.299</td><td><span class="pill pill-pass">PASS</span></td><td>두 actor 협동</td></tr>
+            <tr><td>OnboardingViewModelTests</td><td class="num">7</td><td class="num">0.625</td><td><span class="pill pill-pass">PASS</span></td><td>스텝 게이트</td></tr>
+            <tr><td>EndToEndPairingTests</td><td class="num">1</td><td class="num">0.541</td><td><span class="pill pill-pass">PASS</span></td><td><strong>풀 페어링 E2E</strong></td></tr>
+            <tr class="totals"><td>합계</td><td class="num">89</td><td class="num">1.78</td><td><span class="pill pill-pass">ALL PASS</span></td><td>0 failures (0 unexpected)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="sec-5">
+      <h2>5. 핵심 설계 결정</h2>
+      <ul>
+        <li><strong>PeerChannel 프로토콜 추상화</strong> — PairingManager는 NWConnection을 직접 알지 못함. 실 통신은 <code>NWConnectionPeerChannel</code>이, 단위·E2E 테스트는 <code>LoopbackPeerChannel</code>이 책임. 같은 PairingManager 코드가 두 환경에서 동작.</li>
+        <li><strong>pairConfirm 메시지 추가</strong> — TECHNICAL_SPEC §5에 없는 새로운 케이스. 양측 visual code 확인 후에만 키를 commit하도록 강제. 결과: A가 코드를 보고 거부하면 B는 아무 키도 설치하지 않은 상태로 안전 롤백 (<code>testInitiatorRejectsAfterSeeingCode_responderRollsBack</code>).</li>
+        <li><strong>OSAllocatedUnfairLock</strong> — Swift 6.3 SDK에서 <code>NSLock.lock/unlock</code>이 async unavailable 마킹. 채널 내부 상태 락을 <code>os.OSAllocatedUnfairLock</code> withLock 패턴으로 교체.</li>
+        <li><strong>In-process CryptoKit fingerprint</strong> — <code>ssh-keygen -lf</code> 셸아웃 대신 <code>SHA256.hash</code> 직접 호출. 테스트 빠르고 결정적, ssh-keygen 부재 환경에서도 검증 가능.</li>
+        <li><strong>homeDirectoryURL 주입</strong> — SSHKeyManager / FullDiskAccessChecker 모두 home 경로 주입 가능. 실제 <code>~/.ssh/authorized_keys</code> 변조 위험 0.</li>
+        <li><strong>대칭 상태머신</strong> — PairingManager는 initiator / responder 역할을 메시지 도착 순으로 자동 결정. 단일 코드베이스로 양면 지원.</li>
+        <li><strong>FrameCodec 분리</strong> — NWProtocolFramer는 그대로 두기 어려운 wire format 검증을 pure-Swift StreamReader로 분리. 11개 테스트로 모든 엣지 케이스 (truncated header / oversized / 청크 분할) 커버.</li>
+      </ul>
+    </section>
+
+    <!-- 6 -->
+    <section id="sec-6">
+      <h2>6. 보안 검증</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>보안 속성</th><th>검증 위치</th></tr></thead>
+          <tbody>
+            <tr><td>6자리 코드가 양측에서 일치</td><td><code>EndToEndPairingTests.testFullPairingHandshake_endToEnd</code> (codeOnA == codeOnB 어설션)</td></tr>
+            <tr><td>MITM 시 코드 mismatch (다른 키 → 다른 코드)</td><td><code>PairingCodeGeneratorTests.testDifferentKeys_produceDifferentCode</code></td></tr>
+            <tr><td>키 commit은 코드 확인 후에만</td><td><code>testInitiatorRejectsAfterSeeingCode_responderRollsBack</code> — B의 authorized_keys 미생성 확인</td></tr>
+            <tr><td><code>authorized_keys</code> 라인이 <code>restrict,command="rsync --server"</code></td><td><code>testInstallPeerKey_appendsRestrictedEntry</code> + <code>EndToEndPairingTests</code></td></tr>
+            <tr><td>사용자 기존 ~/.ssh/authorized_keys 보존</td><td><code>testInstallPeerKey_doesNotClobberPreexistingEntries</code></td></tr>
+            <tr><td>개인키 권한 0600 강제</td><td><code>testEnsureKeyPair_createsBothKeyFiles_withCorrectPermissions</code> + <code>testEnsureKeyPair_reEnforcesPermissions_onExistingKey</code></td></tr>
+            <tr><td>테스트가 실 ~/.ssh 변조 안 함</td><td>모든 SSHKeyManagerTests / PairingManagerTests / E2E 가 <code>FileManager.temporaryDirectory</code> 임시 home 사용</td></tr>
+            <tr><td>OpenSSH SHA256 fingerprint 형식 정확</td><td><code>testPublicKeyFingerprint_hasOpenSSHFormat</code> — "SHA256:" 접두 + 43자 base64 (패딩 제거)</td></tr>
+            <tr><td>Ed25519 raw 키 32 바이트</td><td><code>testReadPublicKeyBytes_returnsExactly32Bytes</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section id="sec-7">
+      <h2>7. 커밋 내역</h2>
+
+      <div class="commit-card">
+        <div><span class="sha">b9b31ea</span> · <span class="pill pill-info">feat</span> · <strong>pairing primitives (codegen, preflight, SSH key mgmt, control codec)</strong></div>
+        <div style="color:var(--text-dim);font-size:13px;margin-top:4px">14 files, +1500 lines · 체크포인트 커밋 (2.1+2.2+2.3+3.1)</div>
+      </div>
+
+      <div class="commit-card">
+        <div><span class="sha">02829f3</span> · <span class="pill pill-info">feat</span> · <strong>complete Phase 2+3 — Bonjour discovery and pairing handshake</strong></div>
+        <div style="color:var(--text-dim);font-size:13px;margin-top:4px">19 files, +2300 lines · 최종 통합 (3.2+3.3+2.4+2.5+E2E)</div>
+      </div>
+
+      <pre><span class="lang-label">git log --oneline -6</span><code>02829f3 feat: complete Phase 2+3 — Bonjour discovery and pairing handshake
+b9b31ea feat: pairing primitives (codegen, preflight, SSH key mgmt, control codec)
+6ec6b14 feat: add Phase 1 menu bar shell, ProcessRunner, and Logger
+26dcfaa chore: scaffold Xcode project via xcodegen
+48dbf84 docs: add PRD, Technical Spec, Tech References, Test Strategy, and Handoff
+ea711f2 Initial commit: ClaudeSync project setup
+
+# Branch state
+main → origin/main (in sync, +0)
+Two-Weeks-Team/ClaudeSync · 6 commits since project init</code></pre>
+    </section>
+
+    <!-- 8 -->
+    <section id="sec-8">
+      <h2>8. 알려진 제약 / 후속과제</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>항목</th><th>현재 상태</th><th>해결 시점</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>PeerDiscoveryActor 단위 테스트 없음</td>
+              <td>Bonjour mDNS 의존이라 격리 테스트 불가. PeerInfoDecodingTests로 TXT 디코딩만 커버.</td>
+              <td>실기 두 Mac 통합테스트 (Phase 4 진입 시 또는 별도)</td>
+            </tr>
+            <tr>
+              <td>PairingManager 연결 복구 단순</td>
+              <td>peer disconnect → state.failed로만 처리. 재연결 / 재시도 없음.</td>
+              <td>TECHNICAL_SPEC §8 ConnectionStatus state machine 합류 시 (Phase 4+)</td>
+            </tr>
+            <tr>
+              <td>FirstLaunchPairingView ↔ PairingManager 결합 미완</td>
+              <td>"Codes match — pair" 버튼이 모형. AppEnvironment에 PairingManager 인스턴스 주입 코드 필요.</td>
+              <td>Phase 4 진입 시 또는 사용자 결정에 따라 별도 작업</td>
+            </tr>
+            <tr>
+              <td>RSS 90MB &gt; PRD G4 (50MB)</td>
+              <td>WindowGroup scene 추가로 +12MB. Debug unwarmed 빌드라 Release 측정 필요.</td>
+              <td>Phase 4 hardening + Release 빌드 Instruments</td>
+            </tr>
+            <tr>
+              <td>Universal binary 미설정</td>
+              <td>현재 arm64만</td>
+              <td>Phase 4 hardening (ARCHS = arm64 x86_64)</td>
+            </tr>
+            <tr>
+              <td>Adhoc 코드사인</td>
+              <td>Debug 빌드 정상</td>
+              <td>Phase 4 hardening (Developer ID + notarization)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="sec-9">
+      <h2>9. 다음 페이즈 후보</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>페이즈</th><th>주요 작업</th><th class="num">추정</th><th>위험</th><th>비고</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Phase 4 — FileWatcher</strong></td>
+              <td>FSEvents C API → AsyncStream 브리지, Debouncer 2s per-path quiet-period (3-Tier 분기 포함), stale 마커 정리</td>
+              <td class="num">5–6h</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td>Phase 5 의존성</td>
+            </tr>
+            <tr>
+              <td><strong>Phase 5 — Sync Engine</strong></td>
+              <td>FileSyncActor + 우선순위 큐 + ConflictResolver (newer-wins / 머지) + sync loop prevention (PID-based) + 3-Tier 큐 + rsync 호출</td>
+              <td class="num">10–12h</td>
+              <td><span class="pill pill-high">HIGH</span></td>
+              <td>사용자가 보류 결정한 항목. Phase 4 완료 후 진입.</td>
+            </tr>
+            <tr>
+              <td><strong>하드닝</strong></td>
+              <td>Universal binary 활성화, Developer ID 서명, AppIcon 자산 작성, RSS 최적화 (Release 측정 + Instruments)</td>
+              <td class="num">3h</td>
+              <td><span class="pill pill-low">LOW</span></td>
+              <td>출하 전 필수, 나머지 페이즈와 병행 가능</td>
+            </tr>
+            <tr>
+              <td><strong>실기 시연</strong></td>
+              <td>MacBook Pro ↔ MacBook Air 두 대로 실제 Bonjour 발견 → 페어링 → authorized_keys 검증</td>
+              <td class="num">1h</td>
+              <td><span class="pill pill-medium">MED</span></td>
+              <td>현재 stack 완성도 검증. 발견되는 문제는 Phase 4 시작 전에 패치.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section id="sec-10">
+      <h2>10. 사용자 결정 필요 사항</h2>
+      <p>다음 단계 진입 전 결정이 필요한 3가지. 다음 응답에서 <code>AskUserQuestion</code> 도구로 다시 묻겠습니다.</p>
+
+      <div class="question">
+        <span class="q-tag">Q1 · 다음 페이즈</span>
+        <div class="q-title">Phase 4 (FileWatcher) / Phase 5 (Sync Engine) / 하드닝 중 무엇부터?</div>
+        <div class="q-body">권장: Phase 4 → Phase 5 → 하드닝 순. 의존성을 따라 가는 가장 안전한 순서.</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q2 · 실기 시연</span>
+        <div class="q-title">두 Mac 페어링 시연을 지금 검증할까, Phase 4 합류 후로 미룰까?</div>
+        <div class="q-body">지금 시연하면 현재 stack의 실제 mDNS / NWConnection 동작 검증 가능. 단점: PeerDiscoveryActor를 시연용으로 wiring하는 코드를 임시 작성해야 함 (Phase 4에서 다시 다듬을 부분).</div>
+      </div>
+
+      <div class="question">
+        <span class="q-tag">Q3 · UI 결합</span>
+        <div class="q-title">FirstLaunchPairingView ↔ PairingManager 결합을 지금 마저 끝낼까?</div>
+        <div class="q-body">현재 UI는 mock 상태. AppEnvironment에 PairingManager / PeerDiscoveryActor 인스턴스 주입하고 SwiftUI binding 연결하는 작업 약 1h. Phase 4와 묶어서 같이 처리해도 무방.</div>
+      </div>
+
+      <div class="callout callout-tip">
+        <strong>다음 응답에서:</strong> 위 3개 질문을 <code>AskUserQuestion</code> 도구로 묶어 묻고, 답변 받는 즉시 해당 작업에 착수합니다.
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="back-top" id="backTop" aria-label="맨 위로" title="맨 위로">↑</button>
+
+<script>
+  (function(){
+    const links=document.querySelectorAll('.toc a');
+    const sections=Array.from(document.querySelectorAll('section[id]'));
+    const linkMap=new Map();
+    links.forEach(a=>linkMap.set(a.getAttribute('href').slice(1),a));
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        const id=entry.target.id;
+        const link=linkMap.get(id);
+        if(!link)return;
+        if(entry.isIntersecting){
+          links.forEach(l=>l.classList.remove('active'));
+          link.classList.add('active');
+        }
+      });
+    },{rootMargin:'-30% 0px -60% 0px',threshold:0});
+    sections.forEach(s=>obs.observe(s));
+  })();
+  (function(){
+    const btn=document.getElementById('backTop');
+    window.addEventListener('scroll',()=>{btn.classList.toggle('visible',window.scrollY>400)},{passive:true});
+    btn.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+  })();
+  (function(){
+    if(typeof Chart==='undefined')return;
+    Chart.defaults.color='#8b949e';
+    Chart.defaults.borderColor='#30363d';
+    Chart.defaults.font.family='Inter, system-ui, sans-serif';
+
+    const suites=[
+      ['Smoke (P1)',4],['PairingCode',7],['SSHReachClassifier',5],['RemoteLoginPreflight',6],
+      ['FullDiskAccess',5],['SystemSettings',5],['SSHKeyManager',15],['ControlMsgCodable',8],
+      ['FrameCodec',11],['LoopbackChannel',5],['PeerInfo',5],['PairingMgr',5],['OnboardVM',7],['E2E',1]
+    ];
+    new Chart(document.getElementById('chartSuites'),{
+      type:'bar',
+      data:{
+        labels:suites.map(s=>s[0]),
+        datasets:[{label:'Tests',data:suites.map(s=>s[1]),backgroundColor:'#3fb950',borderRadius:4,barThickness:14}]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,indexAxis:'y',
+        scales:{x:{grid:{color:'#21262d'},ticks:{font:{size:10}}},y:{grid:{display:false},ticks:{font:{size:10}}}},
+        plugins:{legend:{display:false}}
+      }
+    });
+
+    const times=[
+      ['Smoke',550],['PairingCode',5],['SSHClassifier',6],['Preflight',6],['FDA',7],
+      ['SettingsURL',5],['SSHKeyMgr',209],['CtrlMsg',9],['FrameCodec',25],['Loopback',165],
+      ['PeerInfo',5],['PairMgr',299],['OnboardVM',625],['E2E',541]
+    ];
+    new Chart(document.getElementById('chartTimes'),{
+      type:'bar',
+      data:{
+        labels:times.map(t=>t[0]),
+        datasets:[{label:'ms',data:times.map(t=>t[1]),backgroundColor:'#58a6ff',borderRadius:4,barThickness:14}]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,indexAxis:'y',
+        scales:{x:{grid:{color:'#21262d'},ticks:{font:{size:10}}},y:{grid:{display:false},ticks:{font:{size:10}}}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x} ms`}}}
+      }
+    });
+  })();
+</script>
+</body>
+</html>
