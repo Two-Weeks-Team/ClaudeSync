@@ -8,9 +8,13 @@ public struct IgnorePatterns: Sendable {
 
     /// Files that must NEVER be synced regardless of user configuration.
     /// Mirrors `SecurityPolicy.absolutelyExcluded` from TECHNICAL_SPEC §10.
+    /// v1.0.1: bare `.env` and `.env.*` patterns added (SEC-004) so that
+    /// dev secrets in projects don't leak via the GitHub target.
     public static let security: [String] = [
         "credentials.json",
         "oauth_token*",
+        ".env",
+        ".env.*",
         ".env.local",
         ".env.*.local",
         "id_rsa", "id_ed25519",
@@ -18,6 +22,11 @@ public struct IgnorePatterns: Sendable {
         "keychain-*",
         ".netrc",
         ".npmrc", ".pypirc",
+        "*.p12", "*.pfx",
+        "*.keystore",
+        ".aws/credentials",
+        ".gnupg/*",
+        "*_secret*", "*_token*",
     ]
 
     /// Cross-target defaults (rarely useful to sync anywhere).
@@ -90,12 +99,14 @@ public struct IgnorePatterns: Sendable {
         return false
     }
 
-    /// Tiny shell-style wildcard matcher supporting `*` and `?` (case-sensitive).
-    /// Sufficient for our gitignore-flavoured patterns; we don't need character
-    /// classes or alternation.
+    /// Tiny shell-style wildcard matcher supporting `*` and `?`.
+    /// v1.0.1: matching is **case-insensitive** to defend against the macOS
+    /// HFS+/APFS default of case-insensitive file names — without this, a file
+    /// named `Credentials.json` would not match the `credentials.json`
+    /// security pattern (SEC-007).
     static func fnmatch(pattern: String, name: String) -> Bool {
-        let p = Array(pattern)
-        let n = Array(name)
+        let p = Array(pattern.lowercased())
+        let n = Array(name.lowercased())
         return matchHelper(p: p, pi: 0, n: n, ni: 0)
     }
 

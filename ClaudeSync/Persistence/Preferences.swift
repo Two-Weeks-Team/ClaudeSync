@@ -18,15 +18,61 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Whether the user has opted into auto-launch on login.
     public var launchAtLogin: Bool
 
+    /// Last successfully paired peer. v1.0.1: persisted across launches so
+    /// the user doesn't need to re-pair on every restart (RCA-C3).
+    public var pairedPeer: PairedPeerRecord?
+
     public init(
         bandwidthLimitKBps: Int = 0,
         extraExcludes: [String: [String]] = [:],
-        launchAtLogin: Bool = false
+        launchAtLogin: Bool = false,
+        pairedPeer: PairedPeerRecord? = nil
     ) {
         self.bandwidthLimitKBps = bandwidthLimitKBps
         self.extraExcludes = extraExcludes
         self.launchAtLogin = launchAtLogin
+        self.pairedPeer = pairedPeer
     }
+
+    // Codable backwards compatibility — older preferences.json files don't
+    // have `pairedPeer`. Decode a missing field as nil instead of failing.
+    private enum CodingKeys: String, CodingKey {
+        case bandwidthLimitKBps, extraExcludes, launchAtLogin, pairedPeer
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.bandwidthLimitKBps = try c.decodeIfPresent(Int.self, forKey: .bandwidthLimitKBps) ?? 0
+        self.extraExcludes = try c.decodeIfPresent([String: [String]].self,
+                                                   forKey: .extraExcludes) ?? [:]
+        self.launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        self.pairedPeer = try c.decodeIfPresent(PairedPeerRecord.self, forKey: .pairedPeer)
+    }
+}
+
+/// Persistable view of a paired peer. Mirrors PairingManager.PairedPeer but
+/// lives in the Persistence layer so we don't import Pairing types into
+/// Preferences.
+public struct PairedPeerRecord: Codable, Equatable, Sendable {
+    public let machineId: UUID
+    public let hostname: String
+    public let username: String
+    public let publicKeyFingerprint: String
+    public let sshPort: UInt16
+    public let pairedAt: Date
+
+    public init(machineId: UUID, hostname: String, username: String,
+                publicKeyFingerprint: String, sshPort: UInt16,
+                pairedAt: Date = Date()) {
+        self.machineId = machineId
+        self.hostname = hostname
+        self.username = username
+        self.publicKeyFingerprint = publicKeyFingerprint
+        self.sshPort = sshPort
+        self.pairedAt = pairedAt
+    }
+}
+
+extension Preferences {
 
     public static let `default` = Preferences()
 
@@ -95,14 +141,19 @@ public actor PreferencesStore {
     }
 
     private func persist(_ prefs: Preferences) throws {
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        let fm = FileManager.default
+        let parent = fileURL.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o700])
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(prefs)
         try data.write(to: fileURL, options: .atomic)
+        // SEC-009 partial mitigation: lock file to owner-only so other local
+        // user accounts on a shared Mac can't tamper with the paired peer
+        // record or exclude patterns.
+        try? fm.setAttributes([.posixPermissions: 0o600],
+                              ofItemAtPath: fileURL.path)
         logger.info("Preferences saved to \(fileURL.path)", category: "preferences")
     }
 

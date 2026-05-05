@@ -118,13 +118,21 @@ final class FileLogSink: @unchecked Sendable {
         let logsDir = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".claudesync/logs", isDirectory: true)
         do {
-            try fm.createDirectory(at: logsDir, withIntermediateDirectories: true)
+            try fm.createDirectory(at: logsDir, withIntermediateDirectories: true,
+                                   attributes: [.posixPermissions: 0o700])
         } catch {
             return nil
         }
         let url = logsDir.appendingPathComponent("claudesync.log")
         if !fm.fileExists(atPath: url.path) {
-            fm.createFile(atPath: url.path, contents: nil)
+            // SEC-010: log file may contain peer hostnames, fingerprints,
+            // sync paths — restrict to owner-only.
+            fm.createFile(atPath: url.path, contents: nil,
+                          attributes: [.posixPermissions: 0o600])
+        } else {
+            // Re-enforce in case an older install left it 0o644.
+            try? fm.setAttributes([.posixPermissions: 0o600],
+                                  ofItemAtPath: url.path)
         }
         return url
     }
@@ -143,6 +151,7 @@ final class FileLogSink: @unchecked Sendable {
             try? fm.removeItem(at: backup)
         }
         try? fm.moveItem(at: url, to: backup)
-        fm.createFile(atPath: url.path, contents: nil)
+        fm.createFile(atPath: url.path, contents: nil,
+                      attributes: [.posixPermissions: 0o600])
     }
 }
