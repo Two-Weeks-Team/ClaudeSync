@@ -1,0 +1,113 @@
+import Foundation
+
+/// Wire-level control plane message exchanged over the Bonjour TCP connection
+/// between two ClaudeSync peers.
+///
+/// Phase 2+3 only needs the pairing and heartbeat messages; sync / conflict
+/// payloads will land later. The enum is written so additional cases can be
+/// added without breaking existing peers (older peers see and ignore unknown
+/// `type` values).
+///
+/// Reference: TECHNICAL_SPEC §4 (Bonjour Discovery Protocol) lines 526-689.
+public enum ControlMessage: Codable, Equatable, Sendable {
+    case pairRequest(PairRequestPayload)
+    case pairAccept(PairAcceptPayload)
+    case pairReject(reason: String)
+    case heartbeat(timestamp: Date)
+    case disconnect(reason: String)
+    case statusRequest
+
+    // Custom Codable to keep the wire format flat: { "type": "...", ...payload }
+    private enum CodingKeys: String, CodingKey {
+        case type, reason, timestamp, payload
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try c.decode(String.self, forKey: .type)
+        switch type {
+        case "pairRequest":
+            self = .pairRequest(try c.decode(PairRequestPayload.self, forKey: .payload))
+        case "pairAccept":
+            self = .pairAccept(try c.decode(PairAcceptPayload.self, forKey: .payload))
+        case "pairReject":
+            self = .pairReject(reason: try c.decode(String.self, forKey: .reason))
+        case "heartbeat":
+            self = .heartbeat(timestamp: try c.decode(Date.self, forKey: .timestamp))
+        case "disconnect":
+            self = .disconnect(reason: try c.decode(String.self, forKey: .reason))
+        case "statusRequest":
+            self = .statusRequest
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .type, in: c,
+                debugDescription: "Unknown ControlMessage type: \(type)"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .pairRequest(let p):
+            try c.encode("pairRequest", forKey: .type)
+            try c.encode(p, forKey: .payload)
+        case .pairAccept(let p):
+            try c.encode("pairAccept", forKey: .type)
+            try c.encode(p, forKey: .payload)
+        case .pairReject(let reason):
+            try c.encode("pairReject", forKey: .type)
+            try c.encode(reason, forKey: .reason)
+        case .heartbeat(let ts):
+            try c.encode("heartbeat", forKey: .type)
+            try c.encode(ts, forKey: .timestamp)
+        case .disconnect(let reason):
+            try c.encode("disconnect", forKey: .type)
+            try c.encode(reason, forKey: .reason)
+        case .statusRequest:
+            try c.encode("statusRequest", forKey: .type)
+        }
+    }
+}
+
+public struct PairRequestPayload: Codable, Equatable, Sendable {
+    public let machineId: UUID
+    public let hostname: String
+    public let username: String
+    public let publicKey: String           // Full OpenSSH ssh-ed25519 line
+    public let publicKeyFingerprint: String
+    public let protocolVersion: Int
+
+    public init(
+        machineId: UUID, hostname: String, username: String,
+        publicKey: String, publicKeyFingerprint: String, protocolVersion: Int = 1
+    ) {
+        self.machineId = machineId
+        self.hostname = hostname
+        self.username = username
+        self.publicKey = publicKey
+        self.publicKeyFingerprint = publicKeyFingerprint
+        self.protocolVersion = protocolVersion
+    }
+}
+
+public struct PairAcceptPayload: Codable, Equatable, Sendable {
+    public let machineId: UUID
+    public let hostname: String
+    public let username: String
+    public let publicKey: String
+    public let publicKeyFingerprint: String
+    public let sshPort: UInt16
+
+    public init(
+        machineId: UUID, hostname: String, username: String,
+        publicKey: String, publicKeyFingerprint: String, sshPort: UInt16 = 22
+    ) {
+        self.machineId = machineId
+        self.hostname = hostname
+        self.username = username
+        self.publicKey = publicKey
+        self.publicKeyFingerprint = publicKeyFingerprint
+        self.sshPort = sshPort
+    }
+}

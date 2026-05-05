@@ -7,13 +7,26 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		025F977E66A0EAD4053694A4 /* SSHKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */; };
+		13633995DCF25491490F4F82 /* PairingCodeGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F37E848B9CD13F8D04B4E844 /* PairingCodeGeneratorTests.swift */; };
+		14240138EED46CCF5303E6B2 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1E88C251EED254B50EB0ED /* ControlMessage.swift */; };
+		25CCC26B8542B3578E5CB9AD /* SystemSettingsLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491841234764329A7B8ED26B /* SystemSettingsLink.swift */; };
 		27AFB92B3C236883C917E330 /* MenuBarRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5975C47C70670CD6B910D202 /* MenuBarRootView.swift */; };
 		31E58CA37D238F3FF4D03DDA /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB36691E30B5A3442852A5A /* ProcessRunner.swift */; };
+		31F9FD2CBBF202FBD0D01612 /* ClaudeSyncProtocolFramer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A70745984D16F1F219E2287 /* ClaudeSyncProtocolFramer.swift */; };
+		338D0F0DA2B55D74D055E844 /* PairingCodeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9335166A7DC5EBB753443062 /* PairingCodeGenerator.swift */; };
+		3F2D2F6B51967743B34075C0 /* ControlMessageCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F847369BD857C28515439FE /* ControlMessageCodecTests.swift */; };
+		44DD43E8997689A7A4CFA21E /* FullDiskAccessChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AA9AC25BFDEC1EBAF0D940 /* FullDiskAccessChecker.swift */; };
 		4E6AAD725EE272C9183F6C75 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60170142331AED7FD2641DC /* AppEnvironment.swift */; };
 		86C9E1BBF8224185B16004D1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 55518792E8AF671CD3613D86 /* Assets.xcassets */; };
+		95D40F596A6872EA210F02F1 /* SSHConnectivityChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D40097EDC36A59BEE98010B /* SSHConnectivityChecker.swift */; };
+		99D03AAB89CE15C57F65CE8F /* PreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A72329E7D5984988D4D909 /* PreflightTests.swift */; };
 		A89B611AD1B185B4BD6167F8 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 634A274E78BF016F31B1D3D0 /* Logger.swift */; };
+		ADC5FD2D5523BB1B3C4E1A62 /* RemoteLoginPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12DCE2BD4C7231B01FFB7FEC /* RemoteLoginPreflight.swift */; };
+		C4F65480F5324ADF21D6C27E /* SSHKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625BBF39BA27174507DFA0B7 /* SSHKeyManager.swift */; };
 		CDB0E24ED96AE7C31C7330E5 /* ClaudeSyncApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428ACB158E1E4695B0575210 /* ClaudeSyncApp.swift */; };
 		DCAC9A1B1A8A25C7B85C56CA /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C6DC1F1BED2C847D1D293D4 /* SmokeTests.swift */; };
+		FB1EFDC6FC42BEBBE9CDEA8D /* FrameCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CAE5197D0F8897190F246B6 /* FrameCodec.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,15 +40,28 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0B1E88C251EED254B50EB0ED /* ControlMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMessage.swift; sourceTree = "<group>"; };
+		12DCE2BD4C7231B01FFB7FEC /* RemoteLoginPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLoginPreflight.swift; sourceTree = "<group>"; };
+		1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyManagerTests.swift; sourceTree = "<group>"; };
+		25A72329E7D5984988D4D909 /* PreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreflightTests.swift; sourceTree = "<group>"; };
+		28AA9AC25BFDEC1EBAF0D940 /* FullDiskAccessChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullDiskAccessChecker.swift; sourceTree = "<group>"; };
 		2C6DC1F1BED2C847D1D293D4 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		3A70745984D16F1F219E2287 /* ClaudeSyncProtocolFramer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSyncProtocolFramer.swift; sourceTree = "<group>"; };
 		428ACB158E1E4695B0575210 /* ClaudeSyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSyncApp.swift; sourceTree = "<group>"; };
+		491841234764329A7B8ED26B /* SystemSettingsLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSettingsLink.swift; sourceTree = "<group>"; };
 		55518792E8AF671CD3613D86 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5975C47C70670CD6B910D202 /* MenuBarRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarRootView.swift; sourceTree = "<group>"; };
+		625BBF39BA27174507DFA0B7 /* SSHKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyManager.swift; sourceTree = "<group>"; };
 		634A274E78BF016F31B1D3D0 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		7B2905621C529D18F56265E0 /* ClaudeSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7CAE5197D0F8897190F246B6 /* FrameCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameCodec.swift; sourceTree = "<group>"; };
 		87F1F5970FD24826B7A276F5 /* ClaudeSyncTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeSyncTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D40097EDC36A59BEE98010B /* SSHConnectivityChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConnectivityChecker.swift; sourceTree = "<group>"; };
+		9335166A7DC5EBB753443062 /* PairingCodeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCodeGenerator.swift; sourceTree = "<group>"; };
+		9F847369BD857C28515439FE /* ControlMessageCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMessageCodecTests.swift; sourceTree = "<group>"; };
 		A60170142331AED7FD2641DC /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		AEB36691E30B5A3442852A5A /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
+		F37E848B9CD13F8D04B4E844 /* PairingCodeGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCodeGeneratorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -69,6 +95,17 @@
 			path = Sync;
 			sourceTree = "<group>";
 		};
+		4DFD336CDC26CDF886C14E71 /* Preflight */ = {
+			isa = PBXGroup;
+			children = (
+				28AA9AC25BFDEC1EBAF0D940 /* FullDiskAccessChecker.swift */,
+				12DCE2BD4C7231B01FFB7FEC /* RemoteLoginPreflight.swift */,
+				8D40097EDC36A59BEE98010B /* SSHConnectivityChecker.swift */,
+				491841234764329A7B8ED26B /* SystemSettingsLink.swift */,
+			);
+			path = Preflight;
+			sourceTree = "<group>";
+		};
 		5EF142104F03A8BE9880A7C5 /* Coordinator */ = {
 			isa = PBXGroup;
 			children = (
@@ -86,14 +123,30 @@
 		AB4DC395C4E5A224EFDDCA8A /* ClaudeSyncTests */ = {
 			isa = PBXGroup;
 			children = (
+				9F847369BD857C28515439FE /* ControlMessageCodecTests.swift */,
+				F37E848B9CD13F8D04B4E844 /* PairingCodeGeneratorTests.swift */,
+				25A72329E7D5984988D4D909 /* PreflightTests.swift */,
 				2C6DC1F1BED2C847D1D293D4 /* SmokeTests.swift */,
+				1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */,
 			);
 			path = ClaudeSyncTests;
+			sourceTree = "<group>";
+		};
+		BC57C013026BE6CF59E35513 /* Pairing */ = {
+			isa = PBXGroup;
+			children = (
+				4DFD336CDC26CDF886C14E71 /* Preflight */,
+				9335166A7DC5EBB753443062 /* PairingCodeGenerator.swift */,
+			);
+			path = Pairing;
 			sourceTree = "<group>";
 		};
 		D3E67FFA6FCCA9A663F0AD37 /* Discovery */ = {
 			isa = PBXGroup;
 			children = (
+				3A70745984D16F1F219E2287 /* ClaudeSyncProtocolFramer.swift */,
+				0B1E88C251EED254B50EB0ED /* ControlMessage.swift */,
+				7CAE5197D0F8897190F246B6 /* FrameCodec.swift */,
 			);
 			path = Discovery;
 			sourceTree = "<group>";
@@ -106,6 +159,7 @@
 				D3E67FFA6FCCA9A663F0AD37 /* Discovery */,
 				19001F75DF08CE649878A30A /* FileWatcher */,
 				66405500C56E9081D8596A8A /* PackageSync */,
+				BC57C013026BE6CF59E35513 /* Pairing */,
 				0BBAD197DDF8288AF37C19F8 /* Persistence */,
 				E75F031EA3451B3C6339F8C6 /* Resources */,
 				F93BDDECE7F7ACD4C58D1711 /* SSH */,
@@ -162,6 +216,7 @@
 		F93BDDECE7F7ACD4C58D1711 /* SSH */ = {
 			isa = PBXGroup;
 			children = (
+				625BBF39BA27174507DFA0B7 /* SSHKeyManager.swift */,
 			);
 			path = SSH;
 			sourceTree = "<group>";
@@ -259,6 +314,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3F2D2F6B51967743B34075C0 /* ControlMessageCodecTests.swift in Sources */,
+				13633995DCF25491490F4F82 /* PairingCodeGeneratorTests.swift in Sources */,
+				99D03AAB89CE15C57F65CE8F /* PreflightTests.swift in Sources */,
+				025F977E66A0EAD4053694A4 /* SSHKeyManagerTests.swift in Sources */,
 				DCAC9A1B1A8A25C7B85C56CA /* SmokeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -269,9 +328,18 @@
 			files = (
 				4E6AAD725EE272C9183F6C75 /* AppEnvironment.swift in Sources */,
 				CDB0E24ED96AE7C31C7330E5 /* ClaudeSyncApp.swift in Sources */,
+				31F9FD2CBBF202FBD0D01612 /* ClaudeSyncProtocolFramer.swift in Sources */,
+				14240138EED46CCF5303E6B2 /* ControlMessage.swift in Sources */,
+				FB1EFDC6FC42BEBBE9CDEA8D /* FrameCodec.swift in Sources */,
+				44DD43E8997689A7A4CFA21E /* FullDiskAccessChecker.swift in Sources */,
 				A89B611AD1B185B4BD6167F8 /* Logger.swift in Sources */,
 				27AFB92B3C236883C917E330 /* MenuBarRootView.swift in Sources */,
+				338D0F0DA2B55D74D055E844 /* PairingCodeGenerator.swift in Sources */,
 				31E58CA37D238F3FF4D03DDA /* ProcessRunner.swift in Sources */,
+				ADC5FD2D5523BB1B3C4E1A62 /* RemoteLoginPreflight.swift in Sources */,
+				95D40F596A6872EA210F02F1 /* SSHConnectivityChecker.swift in Sources */,
+				C4F65480F5324ADF21D6C27E /* SSHKeyManager.swift in Sources */,
+				25CCC26B8542B3578E5CB9AD /* SystemSettingsLink.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
