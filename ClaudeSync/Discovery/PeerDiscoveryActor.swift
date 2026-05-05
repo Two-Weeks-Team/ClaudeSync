@@ -17,6 +17,11 @@ public actor PeerDiscoveryActor {
         case incomingConnection(PeerChannel, peerEndpointDescription: String)
         case browserStateChanged(String)
         case listenerStateChanged(String)
+        /// v1.1 (RCA-M5): explicit listener-failed event so the owner can
+        /// trigger a clean restart instead of relying on string-matching
+        /// the generic `listenerStateChanged` payload.
+        case listenerFailed(reason: String)
+        case browserFailed(reason: String)
     }
 
     public static let serviceType = "_claudesync._tcp"
@@ -25,15 +30,23 @@ public actor PeerDiscoveryActor {
     private let identity: PairingManager.LocalIdentity
     private let publicKeyFingerprint: String?
     private let logger = AppLogger.shared
+    /// v1.1 (SEC-002): TLS options factory. When non-nil every NWListener
+    /// and NWConnection layer-on a TLS protocol with our self-signed cert.
+    /// When nil, the channel falls back to v1.0.x plaintext mode (used by
+    /// the existing Loopback-only tests).
+    private let tlsOptionsFactory: (@Sendable (String?) async throws -> NWProtocolTLS.Options)?
 
     private var listener: NWListener?
     private var browser: NWBrowser?
     private var endpointsByMachineId: [UUID: NWEndpoint] = [:]
     private var eventContinuation: AsyncStream<PeerEvent>.Continuation?
 
-    public init(identity: PairingManager.LocalIdentity, publicKeyFingerprint: String? = nil) {
+    public init(identity: PairingManager.LocalIdentity,
+                publicKeyFingerprint: String? = nil,
+                tlsOptionsFactory: (@Sendable (String?) async throws -> NWProtocolTLS.Options)? = nil) {
         self.identity = identity
         self.publicKeyFingerprint = publicKeyFingerprint
+        self.tlsOptionsFactory = tlsOptionsFactory
     }
 
     public func events() -> AsyncStream<PeerEvent> {
@@ -51,14 +64,23 @@ public actor PeerDiscoveryActor {
 
     // MARK: - Listener (advertise self)
 
-    public func startAdvertising(paired: Bool = false) throws {
+    public func startAdvertising(paired: Bool = false) async throws {
         guard listener == nil else { throw PeerDiscoveryError.alreadyRunning }
 
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.connectionTimeout = 10
         tcpOptions.enableKeepalive = true
 
-        let parameters = NWParameters(tls: nil, tcp: tcpOptions)
+        // v1.1 (SEC-002): if a TLS factory is configured, layer TLS over
+        // the TCP transport. Listener side uses no pin (responder accepts
+        // any incoming cert and surfaces it post-handshake for pinning).
+        let tlsOptions: NWProtocolTLS.Options?
+        if let factory = tlsOptionsFactory {
+            tlsOptions = try await factory(nil)
+        } else {
+            tlsOptions = nil
+        }
+        let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.includePeerToPeer = true
 
         let framerOptions = NWProtocolFramer.Options(
@@ -94,6 +116,9 @@ public actor PeerDiscoveryActor {
         listener.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             Task { await self.emit(.listenerStateChanged(String(describing: state))) }
+            if case .failed(let err) = state {
+                Task { await self.emit(.listenerFailed(reason: err.localizedDescription)) }
+            }
         }
 
         listener.newConnectionHandler = { [weak self] connection in
@@ -126,6 +151,9 @@ public actor PeerDiscoveryActor {
         browser.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             Task { await self.emit(.browserStateChanged(String(describing: state))) }
+            if case .failed(let err) = state {
+                Task { await self.emit(.browserFailed(reason: err.localizedDescription)) }
+            }
         }
 
         browser.browseResultsChangedHandler = { [weak self] results, changes in
@@ -146,11 +174,21 @@ public actor PeerDiscoveryActor {
     // MARK: - Connect
 
     /// Open a NWConnection-backed channel to a previously-discovered peer.
-    public func connect(to peer: PeerInfo) async throws -> PeerChannel {
+    /// `pinnedFingerprint` (hex SHA-256 of peer's TLS cert) defaults to nil
+    /// for first-pairing TOFU; pass the cached value for paired-peer
+    /// reconnects to enforce the pin.
+    public func connect(to peer: PeerInfo,
+                        pinnedFingerprint: String? = nil) async throws -> PeerChannel {
         guard let endpoint = endpointsByMachineId[peer.machineId] else {
             throw PeerDiscoveryError.noEndpointForPeer(peer.machineId)
         }
-        let parameters = NWParameters(tls: nil, tcp: NWProtocolTCP.Options())
+        let tlsOptions: NWProtocolTLS.Options?
+        if let factory = tlsOptionsFactory {
+            tlsOptions = try await factory(pinnedFingerprint)
+        } else {
+            tlsOptions = nil
+        }
+        let parameters = NWParameters(tls: tlsOptions, tcp: NWProtocolTCP.Options())
         parameters.includePeerToPeer = true
         let framerOptions = NWProtocolFramer.Options(
             definition: ClaudeSyncProtocolFramer.definition

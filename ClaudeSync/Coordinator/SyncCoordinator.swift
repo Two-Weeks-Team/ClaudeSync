@@ -136,6 +136,13 @@ public final class SyncCoordinator {
         if case .success = r.status {
             lastSyncTimes[r.target] = Date()
         }
+        // v1.1 UX: don't surface pre-pair "no peer configured" failures in
+        // Recent Activity. FileSyncActor now silently drops jobs when peer
+        // is nil, but this defends against any leftover path that still
+        // produces that string.
+        if case .failure(let reason) = r.status, reason.contains("no peer configured") {
+            return
+        }
         recentResults.insert(r.status, at: 0)
         if recentResults.count > 20 { recentResults.removeLast() }
     }
