@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync v1.0.1 Quality Pass — 4명 전문가 패널 + 19개 패치</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #30363d; --text: #e6edf3; --text-muted: #8b949e;
+    --accent: #58a6ff; --success: #3fb950; --warning: #d29922; --error: #f85149;
+    --critical: #b62324;
+    --font-body: "Inter", -apple-system, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  code, pre { font-family: var(--font-mono); font-size: 13px; }
+  .page { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--border); background: var(--surface); }
+  .toc h2 { font-size: 13px; text-transform: uppercase; color: var(--text-muted); margin: 0 0 12px 0; letter-spacing: 0.05em; }
+  .toc ol { list-style: none; padding: 0; margin: 0; }
+  .toc li { margin: 6px 0; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--text-muted); font-size: 13px; }
+  .toc a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+  .toc a.active { background: var(--surface-2); color: var(--accent); font-weight: 500; }
+  main { padding: 40px 56px 80px; max-width: 1100px; }
+  .header { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .header h1 { margin: 0 0 12px 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .meta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent); font-size: 11px; font-weight: 600; }
+  section { margin-bottom: 56px; scroll-margin-top: 16px; }
+  h2 { font-size: 22px; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 8px 0; color: var(--text); font-weight: 600; }
+  p { margin: 8px 0 12px 0; }
+  ul, ol { padding-left: 22px; margin: 8px 0 16px 0; }
+  li { margin: 4px 0; }
+  .table-wrap { overflow-x: auto; margin: 12px 0 16px 0; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--surface-2); }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,0.018); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .sev-critical { color: #f85149; font-weight: 700; }
+  .sev-high     { color: #d29922; font-weight: 600; }
+  .sev-med      { color: #58a6ff; }
+  .sev-low      { color: #8b949e; }
+  pre.code-block { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; position: relative; }
+  pre.code-block code { color: var(--text); }
+  .code-lang { position: absolute; top: 6px; right: 12px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .keyword { color: #ff7b72; } .string  { color: #a5d6ff; } .comment { color: #8b949e; font-style: italic; } .number  { color: #79c0ff; }
+  .callout { border: 1px solid var(--border); border-left: 4px solid var(--accent); background: var(--surface); padding: 14px 18px; border-radius: 6px; margin: 14px 0; }
+  .callout.success  { border-left-color: var(--success); }
+  .callout.warning  { border-left-color: var(--warning); }
+  .callout.error    { border-left-color: var(--error); }
+  .callout.critical { border-left-color: var(--critical); background: rgba(255,30,30,0.04); }
+  .callout.tip      { border-left-color: #d2a8ff; }
+  .callout-title { font-weight: 600; margin-bottom: 4px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+  .metric { background: var(--surface); border: 1px solid var(--border); padding: 14px 16px; border-radius: 8px; }
+  .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric-value { font-size: 26px; font-weight: 700; margin: 6px 0 2px 0; color: var(--accent); }
+  .metric-sub { font-size: 12px; color: var(--text-muted); }
+  .chart-container { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin: 16px 0; }
+  .scroll-top { position: fixed; bottom: 24px; right: 24px; background: var(--accent); color: white; border: none; width: 40px; height: 40px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-size: 18px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .scroll-top.visible { opacity: 1; pointer-events: auto; }
+  @media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; }
+    .toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main { padding: 24px; }
+  }
+  @media print {
+    body { background: white; color: black; }
+    .toc, .scroll-top { display: none; }
+    .page { display: block; } main { padding: 0; }
+    h2, h3 { page-break-after: avoid; color: black; }
+    pre.code-block, table, .callout { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#summary">1. Executive Summary</a></li>
+      <li><a href="#discovery">2. 핵심 발견 — 페어링 미작동</a></li>
+      <li><a href="#agents">3. 4명 전문가 병렬 스캔</a></li>
+      <li><a href="#patches">4. 19개 패치 상세</a></li>
+      <li><a href="#tests">5. 테스트 (193/193)</a></li>
+      <li><a href="#release">6. Release 빌드 결과</a></li>
+      <li><a href="#deferred">7. v1.1로 의도적 보류</a></li>
+      <li><a href="#commits">8. 커밋 계획</a></li>
+    </ol>
+  </nav>
+  <main>
+    <header class="header">
+      <h1>ClaudeSync v1.0.1 Quality Pass</h1>
+      <div class="meta">
+        <span class="badge">Code · Project Status</span>
+        <span>📅 2026-05-05</span>
+        <span>✍️ Generated by Claude Code (Opus 4.7)</span>
+      </div>
+    </header>
+
+    <section id="summary">
+      <h2>1. Executive Summary</h2>
+      <p>v1.0-rc1에서 빌드/테스트는 통과했지만 <strong>실 사용 시 페어링이 silent no-op</strong>으로 동작하던 상태를 정상화하고, 4명의 전문가 에이전트가 발견한 19개 issue를 일괄 패치했습니다.</p>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">테스트</div>
+          <div class="metric-value">193 / 193</div>
+          <div class="metric-sub">177 → 193 (+16 신규 회귀)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">패치된 이슈</div>
+          <div class="metric-value">19</div>
+          <div class="metric-sub">CRITICAL 4 · HIGH 7 · MED 8</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Idle Footprint</div>
+          <div class="metric-value">23.5 MB</div>
+          <div class="metric-sub">PRD G4 50MB 충족</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">DMG</div>
+          <div class="metric-value">1.6 MB</div>
+          <div class="metric-sub">ClaudeSync-1.0.1.dmg</div>
+        </div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-title">✅ v1.0.1 도달</div>
+        v1.0-rc1까지는 "코드는 그린이지만 실 동작 미검증" 상태였고, v1.0.1에서 처음으로 <strong>실 페어링 → 동기화 사이클</strong>이 사용자 손에서 완성됩니다.
+      </div>
+    </section>
+
+    <section id="discovery">
+      <h2>2. 핵심 발견 — "페어링이 작동 안 하는 이유"</h2>
+      <p>사용자가 "지난 세션에서 에러를 본 적 있는데 기억이 흐리다"고 진술. 4명의 전문가 중 root-cause-analyst가 **3개의 ship-blocking issue**를 동시에 발견했고, 이것이 사용자가 봤을 증상의 정체로 추정됩니다.</p>
+
+      <div class="callout critical">
+        <div class="callout-title">🚨 RCA-C1: Onboarding 페어링 버튼 = silent no-op</div>
+        <code>FirstLaunchPairingView</code>가 자기 안에서 <code>OnboardingViewModel()</code>을 새로 만들어 사용했고, 그 모델의 <code>onAcceptPair</code> / <code>onConfirmPair</code> / <code>onRejectPair</code> 클로저는 <strong>코드베이스 어디에서도 set되지 않음</strong>. 사용자가 "Accept", "Confirm", "Cancel"을 눌러도 아무 일도 안 일어남.
+      </div>
+
+      <div class="callout critical">
+        <div class="callout-title">🚨 RCA-C2: Responder Mac에 incoming pairing UI가 아예 없음</div>
+        Mac A가 Mac B에게 "Pair" 클릭하면 B의 <code>acceptIncomingPairing</code>가 PairingManager를 시작하고 <strong>받아들이는 사용자의 confirm을 영원히 대기</strong>. 그런데 B의 어디에도 그 confirm UI가 없음 — 메뉴바 popover는 outgoing Pair 버튼만 있고, onboarding 윈도우는 RCA-C1 때문에 어차피 미동작.
+      </div>
+
+      <div class="callout critical">
+        <div class="callout-title">🚨 RCA-C3: 페어링 결과가 영속화되지 않음</div>
+        페어링 성공해도 <code>activePairedPeer</code>가 메모리 var에만 저장됨. 앱 재시작 = 매번 재페어링 필요. authorized_keys는 디스크에 남아있지만 앱이 그 사실을 모르고 <code>FileSyncActor.peer = nil</code>로 부팅 → 모든 sync job이 "no peer configured" 실패.
+      </div>
+
+      <h3>v1.0.1에서 정상화된 흐름</h3>
+      <ul>
+        <li><strong>AppEnvironment</strong>가 <code>OnboardingViewModel</code>을 소유하고 init 시점에 콜백 wiring → 버튼이 실제 PairingManager 호출</li>
+        <li><strong>MenuBarRootView</strong>에 <code>pairingBanner</code> 섹션 추가 → 모든 pairing 단계 (request 수신, accept 수신, sentAccept 대기, failed, rejected)에서 코드 + Accept/Cancel 버튼 노출</li>
+        <li><strong>Onboarding discovery step</strong>에 발견된 peer 인라인 표시 + Pair 버튼 (사용자가 메뉴바 닫고 다시 열 필요 없음)</li>
+        <li><strong>Preferences.pairedPeer</strong> 영속 필드 추가, <code>handlePairingCompleted</code>에서 저장, <code>bootSyncEngine</code>에서 복원 → FileSyncActor 즉시 재배선</li>
+        <li><strong>Settings → Forget paired peer</strong> 버튼 추가</li>
+      </ul>
+    </section>
+
+    <section id="agents">
+      <h2>3. 4명 전문가 병렬 스캔</h2>
+      <p>v1.0.1 시작 시 4명을 <strong>병렬로</strong> 스폰해 광범위 스캔. 단일 에이전트보다 짧은 시간에 더 많은 카테고리 커버.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>에이전트</th><th>스코프</th><th>발견</th><th>실행시간</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><code>feature-dev:code-reviewer</code></td>
+                <td>actor 격리 / data race / async stream / cast / shell quoting</td>
+                <td>4 CRITICAL + 5 IMPORTANT + 2 LOW</td>
+                <td>106초</td></tr>
+            <tr><td><code>quality-engineer</code></td>
+                <td>테스트 커버리지 갭 + flaky 패턴 + 신규 테스트 제안</td>
+                <td>10개 신규 P0/P1/P2 테스트 + dead code · race 식별</td>
+                <td>176초</td></tr>
+            <tr><td><code>security-engineer</code></td>
+                <td>OWASP + macOS-specific (SSH, Bonjour, MITM, exclude bypass)</td>
+                <td>3 CRITICAL + 3 HIGH + 4 MED + 2 INFO</td>
+                <td>145초</td></tr>
+            <tr><td><code>root-cause-analyst</code></td>
+                <td>실 작동 시 깨질 16개 시나리오 가설 검증</td>
+                <td>3 CATASTROPHIC + 11 MAJOR + 5 MINOR</td>
+                <td>241초</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>4명의 결과를 통합 후 우선순위화. <strong>SHIP-BLOCK 11건 + HIGH 8건 = 19개를 v1.0.1에서 처리</strong>, TLS/nonce/sleep-wake 등 구조 변경은 v1.1로 보류.</p>
+    </section>
+
+    <section id="patches">
+      <h2>4. 19개 패치 상세</h2>
+
+      <h3>4.1 페어링 흐름 정상화 (RCA Critical)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>증상</th><th>패치 파일</th><th>요약</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev-critical">RCA-C1</span></td>
+                <td>Accept/Confirm 버튼 무반응</td>
+                <td><code>AppEnvironment.swift</code> + <code>FirstLaunchPairingView.swift</code></td>
+                <td>environment에서 model 공유 + 콜백 wiring</td></tr>
+            <tr><td><span class="sev-critical">RCA-C2</span></td>
+                <td>Responder에 confirm UI 없음</td>
+                <td><code>MenuBarRootView.swift</code></td>
+                <td>pairingBanner 섹션 + 모든 단계 코드/버튼 표시</td></tr>
+            <tr><td><span class="sev-critical">RCA-C3</span></td>
+                <td>재시작 시 페어링 망각</td>
+                <td><code>Preferences.swift</code> + <code>AppEnvironment.swift</code></td>
+                <td>PairedPeerRecord 영속화 + 부팅 복원</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.2 Sync loop 차단 (CR-C2 / CR-C3 / RCA-M11)</h3>
+      <div class="callout warning">
+        <div class="callout-title">⚠️ 사용자가 봤을 가능성 가장 높은 증상</div>
+        v1.0-rc1의 PID 기반 echo suppression은 <strong>수신측 rsync가 sshd의 child라 PID 등록 불가</strong> → 두 Mac이 모든 파일 변경마다 무한 ping-pong. v1.0.1은 mtime 기반으로 전환:
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>패치 파일</th><th>설명</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev-critical">CR-C2</span></td>
+                <td><code>FileWatcherActor.swift</code></td>
+                <td><strong>mtime-stale echo filter</strong>: rsync --archive가 source mtime을 보존하므로, FSEvents가 5초 이상 오래된 mtime의 파일에 대해 발사되면 echo로 판단해 drop. user 편집은 항상 mtime ≈ now.</td></tr>
+            <tr><td><span class="sev-critical">CR-C3</span></td>
+                <td><code>FileSyncActor.swift</code></td>
+                <td>rsync exit 0 + stdout itemize-changes 파싱 → 진짜 transferred 카운트로 false-success 차단</td></tr>
+            <tr><td><span class="sev-high">RCA-M11</span></td>
+                <td><code>ProcessRunner.swift</code></td>
+                <td>real PID 노출 + UUID 기반 마커 PID로 collision 방지</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.3 SSH 보안 (SEC)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>위협</th><th>패치</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev-critical">SEC-001</span></td>
+                <td>authorized_keys의 <code>${SSH_ORIGINAL_COMMAND}</code> 셸 확장 → 임의 rsync 인자 인젝션</td>
+                <td><strong>rsync-server-wrapper 스크립트</strong> 도입 — 정적 경로 wrapper가 셸 메타/위험 인자(--config/--rsh/--daemon) 거부 후 rsync 호출</td></tr>
+            <tr><td><span class="sev-high">SEC-006 / CR-C4</span></td>
+                <td>peer hostname의 셸 메타로 ssh 명령 깨짐 ("Kim's MacBook")</td>
+                <td><code>isSafeNetworkIdentifier</code> allow-list (<code>^[a-zA-Z0-9._-]+$</code>) — 페어링 양 끝에서 검증</td></tr>
+            <tr><td><span class="sev-high">PairingManager</span></td>
+                <td>빈 키로 false code-match (양쪽이 빈 데이터로 같은 코드 생성)</td>
+                <td>parsePublicKeyBytes 실패 / localPubkey nil 시 .failed transition</td></tr>
+            <tr><td><span class="sev-med">SEC-004</span></td>
+                <td>bare <code>.env</code>, <code>.env.production</code> 시크릿 누출</td>
+                <td>security excludes에 <code>.env</code>, <code>.env.*</code>, <code>.aws/credentials</code>, <code>.gnupg/*</code>, <code>*_secret*</code>, <code>*_token*</code>, <code>*.p12</code>, <code>*.pfx</code>, <code>*.keystore</code> 추가</td></tr>
+            <tr><td><span class="sev-med">SEC-007</span></td>
+                <td>HFS+/APFS case-insensitive에서 Credentials.json 누출</td>
+                <td><code>fnmatch</code> case-insensitive로 변경</td></tr>
+            <tr><td><span class="sev-med">SEC-008</span></td>
+                <td>userExtraExcludes의 <code>--include</code>가 security 패턴 shadow</td>
+                <td>rsync 인자 순서: security excludes 먼저 → per-target → user extras</td></tr>
+            <tr><td><span class="sev-med">SEC-010</span></td>
+                <td>로그 파일 0o644 — 같은 Mac 다른 user 읽기 가능</td>
+                <td>logs / preferences.json 모두 0o600 강제</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.4 통신 안정성 (CR-I)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>패치</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev-high">CR-I1</span></td>
+                <td><code>PairRequestPayload.sshPort</code> 추가 — 비표준 sshd 포트 양방향 지원. backwards-compatible Codable (없으면 22 default)</td></tr>
+            <tr><td><span class="sev-high">CR-I2</span></td>
+                <td><code>NWConnectionPeerChannel.incomingMessages()</code> deadlock fix — lock 안에서 prev continuation 추출, 락 해제 후 finish() 호출</td></tr>
+            <tr><td><span class="sev-high">CR-I5</span></td>
+                <td><code>as! NWConnectionPeerChannel</code> force cast 제거 — PeerChannel 프로토콜로 직접 받음</td></tr>
+            <tr><td><span class="sev-med">RCA-M2</span></td>
+                <td>rsync filter 순서: --include 먼저 → --exclude 나중 (first-match-wins 정합)</td></tr>
+            <tr><td><span class="sev-med">RCA-M1</span></td>
+                <td>SyncCoordinator.start에 .projects 추가 — Documents/GitHub의 on-demand sync 정상 동작</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tests">
+      <h2>5. 테스트 결과 (193/193 PASS)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>스위트</th><th>변경</th><th>설명</th></tr></thead>
+          <tbody>
+            <tr><td>기존 24 스위트</td><td>177 (그대로)</td>
+                <td>회귀 없음. SSHKeyManagerTests 1건 + EndToEndPairingTests 2건이 새 wrapper 경로 검증으로 업데이트됨</td></tr>
+            <tr><td><strong>V101RegressionTests</strong> (신규)</td><td><strong>16</strong></td>
+                <td>v1.0.1의 모든 ship-block fix를 codify — 회귀 방지의 핵심 안전망</td></tr>
+            <tr><td><strong>합계</strong></td><td><strong>193</strong></td><td>11.4초</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>V101RegressionTests 항목</h3>
+      <ul>
+        <li><code>testIgnorePatterns_securityList_includesBareDotEnvAndVariants</code> (SEC-004)</li>
+        <li><code>testIgnorePatterns_matchesAreCaseInsensitive</code> (SEC-007)</li>
+        <li><code>testRsyncCommandBuilder_securityExcludes_appearBeforeUserExtras</code> (SEC-008)</li>
+        <li><code>testRsyncCommandBuilder_includes_appearBeforeExcludes_forIncrementalJobs</code> (RCA-M2)</li>
+        <li><code>testIsSafeNetworkIdentifier_acceptsCleanNames</code> + <code>rejectsShellMetaAndWhitespace</code> (SEC-006/CR-C4)</li>
+        <li><code>testPairRequestPayload_codable_roundtripsSshPort</code> + 누락 시 22 default (CR-I1)</li>
+        <li><code>testFileWatcher_dropsMtimeStaleEvent_asEcho</code> (CR-C2 — sync loop 차단의 핵심 검증)</li>
+        <li><code>testPairingManager_handlePairRequest_emptyKey_transitionsToFailed</code> (force unwrap → 안전한 fail)</li>
+        <li><code>testPreferences_pairedPeer_roundtrips_throughJSON</code> + v1.0 backwards-compat (RCA-C3)</li>
+        <li>3 × <code>testRsyncOutcomeClassifier_*</code> (CR-C3)</li>
+        <li><code>testRsyncWrapperScript_includesAllowlistAndDenylist</code> (SEC-001)</li>
+      </ul>
+      <div class="chart-container">
+        <canvas id="testGrowth" height="120"></canvas>
+      </div>
+    </section>
+
+    <section id="release">
+      <h2>6. Release 빌드 결과</h2>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Architectures</div>
+          <div class="metric-value" style="font-size:18px;">arm64 + x86_64</div>
+          <div class="metric-sub">lipo verified</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">App Bundle</div>
+          <div class="metric-value">4.6 MB</div>
+          <div class="metric-sub">+0.4MB vs v1.0-rc1 (wrapper script + UI)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">DMG</div>
+          <div class="metric-value">1.6 MB</div>
+          <div class="metric-sub">ClaudeSync-1.0.1.dmg</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Idle Footprint</div>
+          <div class="metric-value">23.5 MB</div>
+          <div class="metric-sub">+0.8MB vs v1.0-rc1 (PRD G4 50MB 충족)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">leaks</div>
+          <div class="metric-value">0</div>
+          <div class="metric-sub">leaks(1) 검증</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Build version</div>
+          <div class="metric-value" style="font-size:20px;">1.0.1 (2)</div>
+          <div class="metric-sub">CFBundleShortVersionString / Version</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="deferred">
+      <h2>7. v1.1로 의도적 보류</h2>
+      <p>4명 전문가가 발견한 일부 issue는 구조 변경이 커서 v1.0.1 범위 밖입니다. 모두 backlog에 등록.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>이슈</th><th>v1.1 작업</th></tr></thead>
+          <tbody>
+            <tr><td>SEC-002</td>
+                <td>Bonjour control channel TLS 부재 → MITM</td>
+                <td>NWParameters에 NWProtocolTLS.Options 추가, 페어링 시 인증서 핀닝</td></tr>
+            <tr><td>SEC-003</td>
+                <td>페어링 코드 nonce 부재, brute-force 가능성</td>
+                <td>session nonce 교환 후 코드 derive에 합산, 1회 시도 enforced</td></tr>
+            <tr><td>SEC-005</td>
+                <td><code>StrictHostKeyChecking=accept-new</code> TOFU</td>
+                <td>페어링 시 ssh-keyscan으로 known_hosts 사전 등록</td></tr>
+            <tr><td>RCA-M5/M6/M7</td>
+                <td>NWListener .failed / Wi-Fi flap / sleep-wake 자동 복구 부재</td>
+                <td>NWPathMonitor + NSWorkspace sleep/wake observer</td></tr>
+            <tr><td>RCA-M9</td>
+                <td>Clock skew 검출 없음 — newer-wins 오류</td>
+                <td>페어링 시 시각 차이 측정 + 30s 초과면 UI 경고</td></tr>
+            <tr><td>SEC-009</td>
+                <td>preferences.json 무결성 보호 없음 (서명/HMAC)</td>
+                <td>로컬 키로 HMAC 서명, 로드 시 검증</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="commits">
+      <h2>8. 커밋 계획</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>그룹</th><th>파일</th><th>메시지</th></tr></thead>
+          <tbody>
+            <tr><td>C1</td>
+                <td>IgnorePatterns + Logger + Preferences + RsyncCommandBuilder + SSHKeyManager</td>
+                <td><code>fix(security): SSH wrapper, exclude order, .env, case-insensitive, log perms</code></td></tr>
+            <tr><td>C2</td>
+                <td>ControlMessage + PairingManager + NWConnectionPeerChannel + Coordinator + FileWatcher + FileSync + ProcessRunner + RsyncCommandBuilder</td>
+                <td><code>fix(sync): mtime echo filter, real PID, sshPort, deadlock, force-unwrap</code></td></tr>
+            <tr><td>C3</td>
+                <td>AppEnvironment + ClaudeSyncApp + FirstLaunchPairingView + MenuBarRootView + OnboardingViewModel + SettingsView + Preferences (PairedPeerRecord)</td>
+                <td><code>fix(ui): wire pairing buttons, persist paired peer, incoming-pair menubar UI</code></td></tr>
+            <tr><td>C4</td>
+                <td>V101RegressionTests + SSHKeyManagerTests + EndToEndPairingTests</td>
+                <td><code>test(v1.0.1): 16 regression tests, update SSH wrapper assertions</code></td></tr>
+            <tr><td>C5</td>
+                <td>project.yml (1.0.1) + HANDOFF + HTML 보고서</td>
+                <td><code>chore: bump to v1.0.1, handoff and quality-pass report</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<button class="scroll-top" id="scrollTop" aria-label="Back to top">↑</button>
+<script>
+  const links = document.querySelectorAll('.toc a');
+  const sections = document.querySelectorAll('main section');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.toc a[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+  links.forEach(l => l.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const id = l.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  const btn = document.getElementById('scrollTop');
+  window.addEventListener('scroll', () => btn.classList.toggle('visible', window.scrollY > 400));
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+  new Chart(document.getElementById('testGrowth').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: ['Phase 1', 'Phase 2+3', 'Phase 4', 'Phase 5', 'Phase 6', 'v0.2', 'v0.3', 'v1.0-rc1', 'v1.0.1'],
+      datasets: [{
+        label: 'Test count',
+        data: [4, 89, 121, 145, 158, 158, 162, 177, 193],
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,0.15)',
+        tension: 0.25,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: '테스트 누적 추이 (193 도달)', color: '#e6edf3' },
+        legend: { labels: { color: '#e6edf3' } }
+      },
+      scales: {
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, beginAtZero: true },
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+</script>
+</body>
+</html>
