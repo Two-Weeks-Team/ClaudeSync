@@ -4,12 +4,17 @@ import SwiftUI
 /// and the initial pairing handshake.
 ///
 /// Shown via a `WindowGroup` scene routed by `AppEnvironment.needsOnboarding`.
+///
+/// v1.0.1 (RCA-C1): the view now uses the OnboardingViewModel owned by
+/// AppEnvironment so the Accept/Confirm/Reject buttons actually drive the
+/// PairingManager. Previously the view created a fresh model whose callbacks
+/// were never assigned, leaving the buttons silent no-ops.
 public struct FirstLaunchPairingView: View {
-    @State private var model: OnboardingViewModel
+    @Environment(AppEnvironment.self) private var environment
 
-    public init(model: OnboardingViewModel = OnboardingViewModel()) {
-        _model = State(initialValue: model)
-    }
+    public init() {}
+
+    private var model: OnboardingViewModel { environment.onboardingViewModel }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -167,9 +172,30 @@ public struct FirstLaunchPairingView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Text("Make sure the other Mac is awake, on the same WiFi, and running ClaudeSync.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // v1.0.1: show discovered peers + Pair buttons inline so the user
+            // doesn't have to close this window and dig into the menu bar.
+            if !environment.discoveredPeers.isEmpty {
+                Divider()
+                Text("Discovered peers:")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(environment.discoveredPeers) { peer in
+                    HStack {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .foregroundStyle(.tint)
+                        Text("\(peer.hostname) (\(peer.username))")
+                            .font(.callout)
+                        Spacer()
+                        Button("Pair") {
+                            Task { try? await environment.initiatePairing(with: peer) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } else {
+                Text("Make sure the other Mac is awake, on the same WiFi, and running ClaudeSync.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 Spacer()
                 Button("Skip for now") { model.reset() }
@@ -274,4 +300,7 @@ public struct FirstLaunchPairingView: View {
     }
 }
 
-#Preview("Welcome") { FirstLaunchPairingView() }
+#Preview("Welcome") {
+    FirstLaunchPairingView()
+        .environment(AppEnvironment())
+}

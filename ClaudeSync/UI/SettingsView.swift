@@ -48,6 +48,30 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // v1.0.1: surface the persisted paired peer + a Forget button so
+            // the user can sever the link without deleting authorized_keys
+            // by hand.
+            Section("Paired peer") {
+                if let p = environment.activePairedPeer {
+                    LabeledContent("Hostname") {
+                        Text(p.hostname).font(.caption)
+                    }
+                    LabeledContent("Username") {
+                        Text(p.username).font(.caption)
+                    }
+                    LabeledContent("Fingerprint") {
+                        Text(p.publicKeyFingerprint).font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Forget paired peer") {
+                        Task { await environment.forgetPairedPeer() }
+                    }
+                    .foregroundStyle(.red)
+                } else {
+                    Text("No peer paired yet.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             saveBar
         }
     }

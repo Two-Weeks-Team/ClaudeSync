@@ -11,6 +11,14 @@ struct MenuBarRootView: View {
             header
             Divider()
             statusRow
+            // RCA-C2: surface incoming/in-flight pairing in the menu bar so
+            // the responder Mac can confirm without opening the onboarding
+            // window. Before v1.0.1, only the onboarding window had this UI
+            // so a Mac that received a pairRequest had no way to confirm.
+            if pairingBannerVisible {
+                Divider()
+                pairingBanner
+            }
             Divider()
             peersSection
             Divider()
@@ -28,6 +36,82 @@ struct MenuBarRootView: View {
             // Auto-boot the watcher when the popover first appears so the user
             // sees something happening even before pairing completes.
             await environment.bootSyncEngine()
+        }
+    }
+
+    // MARK: - Pairing banner (RCA-C2)
+
+    private var pairingBannerVisible: Bool {
+        switch environment.activePairingState {
+        case .receivedPairRequest, .receivedPairAccept, .sentPairAccept,
+             .sentPairRequest, .failed, .rejected:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var pairingBanner: some View {
+        switch environment.activePairingState {
+        case .receivedPairRequest(let req, let code):
+            pairingPrompt(
+                title: "Pair request from \(req.hostname)",
+                code: code,
+                primary: "Accept — codes match",
+                primaryAction: { await environment.acceptPendingPairing() }
+            )
+        case .receivedPairAccept(let accept, let code):
+            pairingPrompt(
+                title: "\(accept.hostname) accepted — confirm code",
+                code: code,
+                primary: "Confirm — codes match",
+                primaryAction: { await environment.confirmPairingCode() }
+            )
+        case .sentPairAccept(_, let code):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Waiting for the other Mac to confirm…")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(code)
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+            }
+        case .sentPairRequest:
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Waiting for peer to accept…").font(.caption)
+            }
+        case .failed(let msg):
+            Label("Pairing failed: \(msg)", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.orange)
+        case .rejected(let reason):
+            Label("Pairing rejected: \(reason)", systemImage: "xmark.octagon.fill")
+                .font(.caption).foregroundStyle(.red)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func pairingPrompt(
+        title: String, code: String, primary: String,
+        primaryAction: @escaping () async -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(code)
+                .font(.system(size: 24, weight: .bold, design: .monospaced))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.accentColor.opacity(0.12))
+                .cornerRadius(6)
+            HStack {
+                Button(primary) { Task { await primaryAction() } }
+                    .buttonStyle(.borderedProminent)
+                Button("Cancel") {
+                    Task { await environment.rejectActivePairing(reason: "user-cancelled") }
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
