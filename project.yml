@@ -1,0 +1,86 @@
+name: ClaudeSync
+options:
+  bundleIdPrefix: com.claudesync
+  deploymentTarget:
+    macOS: "15.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_UPCOMING_FEATURE_CONCISE_MAGIC_FILE: YES
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+    CLANG_ENABLE_MODULES: YES
+    GCC_NO_COMMON_BLOCKS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  ClaudeSync:
+    type: application
+    platform: macOS
+    sources:
+      - path: ClaudeSync
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/ClaudeSync.entitlements"
+    resources:
+      - path: ClaudeSync/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.claudesync.app
+        PRODUCT_NAME: ClaudeSync
+        INFOPLIST_FILE: ClaudeSync/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ClaudeSync/Resources/ClaudeSync.entitlements
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+
+  ClaudeSyncTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - ClaudeSyncTests
+    dependencies:
+      - target: ClaudeSync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.claudesync.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ClaudeSync.app/Contents/MacOS/ClaudeSync"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+
+schemes:
+  ClaudeSync:
+    build:
+      targets:
+        ClaudeSync: all
+        ClaudeSyncTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ClaudeSyncTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
