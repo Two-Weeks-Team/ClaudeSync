@@ -184,22 +184,18 @@ public struct FirstLaunchPairingView: View {
                 .font(.headline)
 
             switch state {
-            case .receivedPairAccept(_, let code), .receivedPairRequest(_, let code), .sentPairAccept(_, let code):
-                Text("Verify that this code matches what's shown on the other Mac:")
-                    .font(.subheadline)
-                Text(code)
-                    .font(.system(size: 44, weight: .bold, design: .monospaced))
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.accentColor.opacity(0.12))
-                    .cornerRadius(12)
-                HStack {
-                    Button("Codes match — pair") { /* hooked by AppEnvironment */ }
-                        .buttonStyle(.borderedProminent)
-                    Button("Codes don't match — cancel") { /* hooked by AppEnvironment */ }
-                        .buttonStyle(.bordered)
-                }
+            case .receivedPairRequest(_, let code):
+                pairingCodeBox(code: code,
+                               primaryLabel: "Accept — code matches",
+                               primaryAction: { await model.acceptPair() })
+            case .receivedPairAccept(_, let code):
+                pairingCodeBox(code: code,
+                               primaryLabel: "Confirm — code matches",
+                               primaryAction: { await model.confirmPair() })
+            case .sentPairAccept(_, let code):
+                pairingCodeBox(code: code,
+                               primaryLabel: "Waiting for the other Mac…",
+                               primaryAction: nil)
             case .completed:
                 statusRow(systemImage: "checkmark.seal.fill", color: .green,
                           text: "Pairing complete.")
@@ -243,6 +239,37 @@ public struct FirstLaunchPairingView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: systemImage).foregroundStyle(color)
             Text(text).font(.subheadline)
+        }
+    }
+
+    @ViewBuilder
+    private func pairingCodeBox(
+        code: String,
+        primaryLabel: String,
+        primaryAction: (() async -> Void)?
+    ) -> some View {
+        Text("Verify that this code matches what's shown on the other Mac:")
+            .font(.subheadline)
+        Text(code)
+            .font(.system(size: 44, weight: .bold, design: .monospaced))
+            .padding(.vertical, 12)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity)
+            .background(Color.accentColor.opacity(0.12))
+            .cornerRadius(12)
+        HStack {
+            if let primaryAction {
+                Button(primaryLabel) {
+                    Task { await primaryAction() }
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                ProgressView(primaryLabel)
+            }
+            Button("Codes don't match — cancel") {
+                Task { await model.rejectPair(reason: "code-mismatch") }
+            }
+            .buttonStyle(.bordered)
         }
     }
 }

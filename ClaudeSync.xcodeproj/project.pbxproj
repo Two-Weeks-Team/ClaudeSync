@@ -10,6 +10,7 @@
 		01EF2044E2FFBDD062C7E3CB /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC417E1991C3AB1F21D97317 /* SyncCoordinator.swift */; };
 		025F977E66A0EAD4053694A4 /* SSHKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */; };
 		055C99B16969C0E86E6557AE /* PeerDiscoveryActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88218E629F24BD5A9B2121A7 /* PeerDiscoveryActor.swift */; };
+		0BEA10F6F3CE1E9B8FBCE831 /* SyncHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2106FF7B3C28C6A7E97943FB /* SyncHistoryTests.swift */; };
 		13633995DCF25491490F4F82 /* PairingCodeGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F37E848B9CD13F8D04B4E844 /* PairingCodeGeneratorTests.swift */; };
 		14240138EED46CCF5303E6B2 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1E88C251EED254B50EB0ED /* ControlMessage.swift */; };
 		1BFF46058B3FC4092DAFE3FE /* EndToEndPairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAABF5C5BB36B0BAC201C96A /* EndToEndPairingTests.swift */; };
@@ -47,6 +48,7 @@
 		ADC5FD2D5523BB1B3C4E1A62 /* RemoteLoginPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12DCE2BD4C7231B01FFB7FEC /* RemoteLoginPreflight.swift */; };
 		B1C6840F529ECDCBCE9FC775 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62BEB790FC1C97BE7B0AFA4 /* OnboardingViewModel.swift */; };
 		B6F8E7CBCCC33DC70EEFA29A /* EndToEndSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D710A270DA773C518D7A03 /* EndToEndSyncTests.swift */; };
+		B8A1AE483C7F83CC703BCBD9 /* SyncHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2FAFB9DE91F4DFB3E893A89 /* SyncHistory.swift */; };
 		C4F65480F5324ADF21D6C27E /* SSHKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625BBF39BA27174507DFA0B7 /* SSHKeyManager.swift */; };
 		CDB0E24ED96AE7C31C7330E5 /* ClaudeSyncApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428ACB158E1E4695B0575210 /* ClaudeSyncApp.swift */; };
 		D69B005326234C095A7B3018 /* PeerDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB06AF76410178B28249F13 /* PeerDiscoveryTests.swift */; };
@@ -81,6 +83,7 @@
 		12DCE2BD4C7231B01FFB7FEC /* RemoteLoginPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLoginPreflight.swift; sourceTree = "<group>"; };
 		1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyManagerTests.swift; sourceTree = "<group>"; };
 		2022822ED00FD6970AA5D895 /* SyncTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTarget.swift; sourceTree = "<group>"; };
+		2106FF7B3C28C6A7E97943FB /* SyncHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHistoryTests.swift; sourceTree = "<group>"; };
 		25A72329E7D5984988D4D909 /* PreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreflightTests.swift; sourceTree = "<group>"; };
 		28AA9AC25BFDEC1EBAF0D940 /* FullDiskAccessChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullDiskAccessChecker.swift; sourceTree = "<group>"; };
 		29147CFD772B9599044D59DB /* FSEventStreamWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FSEventStreamWatcher.swift; sourceTree = "<group>"; };
@@ -121,6 +124,7 @@
 		AA1C492A29547E48309C58E5 /* Debouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Debouncer.swift; sourceTree = "<group>"; };
 		AEB36691E30B5A3442852A5A /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
 		B9CF12E964F20F2544CC23F6 /* SyncTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTargetTests.swift; sourceTree = "<group>"; };
+		C2FAFB9DE91F4DFB3E893A89 /* SyncHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHistory.swift; sourceTree = "<group>"; };
 		C574D5D22AAACC0CDBE2FF75 /* FileSyncActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncActor.swift; sourceTree = "<group>"; };
 		C62BEB790FC1C97BE7B0AFA4 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		CB6F0A48BFC58349163093C5 /* FirstLaunchPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstLaunchPairingView.swift; sourceTree = "<group>"; };
@@ -136,6 +140,7 @@
 		0BBAD197DDF8288AF37C19F8 /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
+				C2FAFB9DE91F4DFB3E893A89 /* SyncHistory.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -221,6 +226,7 @@
 				2C6DC1F1BED2C847D1D293D4 /* SmokeTests.swift */,
 				1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */,
 				EAA0918C59393731747B824D /* SyncCoordinatorTests.swift */,
+				2106FF7B3C28C6A7E97943FB /* SyncHistoryTests.swift */,
 				5BAE739CA62519CE2A87E726 /* SyncJobTests.swift */,
 				B9CF12E964F20F2544CC23F6 /* SyncTargetTests.swift */,
 			);
@@ -435,6 +441,7 @@
 				025F977E66A0EAD4053694A4 /* SSHKeyManagerTests.swift in Sources */,
 				DCAC9A1B1A8A25C7B85C56CA /* SmokeTests.swift in Sources */,
 				A0460B7BAB325208C53E8EDC /* SyncCoordinatorTests.swift in Sources */,
+				0BEA10F6F3CE1E9B8FBCE831 /* SyncHistoryTests.swift in Sources */,
 				7B5CEFC36CDFFB77745AD7EE /* SyncJobTests.swift in Sources */,
 				E498546006E02EBAE9FB4F2F /* SyncTargetTests.swift in Sources */,
 			);
@@ -473,6 +480,7 @@
 				95D40F596A6872EA210F02F1 /* SSHConnectivityChecker.swift in Sources */,
 				C4F65480F5324ADF21D6C27E /* SSHKeyManager.swift in Sources */,
 				01EF2044E2FFBDD062C7E3CB /* SyncCoordinator.swift in Sources */,
+				B8A1AE483C7F83CC703BCBD9 /* SyncHistory.swift in Sources */,
 				F62DBB79BF365425493BE6EF /* SyncJob.swift in Sources */,
 				59CDBEA87FF250980897F8BF /* SyncTarget.swift in Sources */,
 				25CCC26B8542B3578E5CB9AD /* SystemSettingsLink.swift in Sources */,

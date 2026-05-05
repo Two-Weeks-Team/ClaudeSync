@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Root content for the MenuBarExtra popover.
-///
-/// Phase 1 shows a minimal status surface: connection summary, a quit button,
-/// and a placeholder for the per-target rows that arrive in later phases.
+/// Root content for the MenuBarExtra popover. Phase 6 expands the Phase 1
+/// stub with per-target rows, recent activity, and Start/Stop control.
 struct MenuBarRootView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,10 +12,21 @@ struct MenuBarRootView: View {
             Divider()
             statusRow
             Divider()
+            targetsSection
+            if !environment.coordinator.recentResults.isEmpty {
+                Divider()
+                recentActivitySection
+            }
+            Divider()
             footer
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 360)
+        .task {
+            // Auto-boot the watcher when the popover first appears so the user
+            // sees something happening even before pairing completes.
+            await environment.bootSyncEngine()
+        }
     }
 
     private var header: some View {
@@ -27,7 +37,7 @@ struct MenuBarRootView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("ClaudeSync")
                     .font(.headline)
-                Text("Phase 1 — menu bar shell")
+                Text(environment.overallStatus.shortLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -37,15 +47,96 @@ struct MenuBarRootView: View {
 
     private var statusRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Status")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(environment.overallStatus.shortLabel)
+            Text("Coordinator")
+                .font(.caption).foregroundStyle(.secondary)
+            Text(coordinatorStateLabel)
                 .font(.body)
         }
     }
 
-    @Environment(\.openWindow) private var openWindow
+    private var coordinatorStateLabel: String {
+        switch environment.coordinator.state {
+        case .idle:                  return "Idle"
+        case .watching:              return "Watching for changes"
+        case .syncing(let active):   return "Syncing \(active) job(s)…"
+        case .error(let message):    return "Error: \(message)"
+        }
+    }
+
+    private var targetsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Targets")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(SyncTarget.allCases) { target in
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                    Text(target.displayName).font(.callout)
+                    Spacer()
+                    if let lastSync = environment.coordinator.lastSyncTimes[target] {
+                        Text(lastSync.formatted(.relative(presentation: .numeric)))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        Text("—").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Button {
+                        Task { await environment.coordinator.triggerFullSync(target) }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Force sync \(target.displayName)")
+                }
+            }
+        }
+    }
+
+    private var recentActivitySection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Recent Activity")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(environment.coordinator.recentResults.prefix(5).enumerated()),
+                    id: \.offset) { _, status in
+                HStack(spacing: 6) {
+                    Image(systemName: statusIcon(status))
+                        .font(.caption)
+                        .foregroundStyle(statusColor(status))
+                    Text(statusText(status))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private func statusIcon(_ s: SyncResult.ResultStatus) -> String {
+        switch s {
+        case .success:                return "checkmark.circle.fill"
+        case .partialSuccess:         return "exclamationmark.circle.fill"
+        case .failure:                return "xmark.octagon.fill"
+        case .cancelled:              return "minus.circle.fill"
+        }
+    }
+
+    private func statusColor(_ s: SyncResult.ResultStatus) -> Color {
+        switch s {
+        case .success:                return .green
+        case .partialSuccess:         return .yellow
+        case .failure:                return .red
+        case .cancelled:              return .gray
+        }
+    }
+
+    private func statusText(_ s: SyncResult.ResultStatus) -> String {
+        switch s {
+        case .success:                                    return "Synced successfully"
+        case .partialSuccess(let ok, let fail):           return "Partial: \(ok) ok, \(fail) failed"
+        case .failure(let reason):                        return "Failed: \(reason)"
+        case .cancelled:                                  return "Cancelled"
+        }
+    }
 
     private var footer: some View {
         HStack {
@@ -56,7 +147,10 @@ struct MenuBarRootView: View {
             .buttonStyle(.bordered)
             Spacer()
             Button("Quit ClaudeSync") {
-                NSApp.terminate(nil)
+                Task {
+                    await environment.shutdownSyncEngine()
+                    NSApp.terminate(nil)
+                }
             }
             .keyboardShortcut("q", modifiers: [.command])
         }

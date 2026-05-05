@@ -26,12 +26,29 @@ public final class OnboardingViewModel {
     private let preflight: RemoteLoginPreflight
     private let fdaChecker: FullDiskAccessChecker
 
+    /// Pluggable pairing actions — set by AppEnvironment once a PairingManager
+    /// instance exists (i.e. after a peer has been discovered). The view calls
+    /// these closures on button taps without knowing about PairingManager.
+    public var onAcceptPair: (() async -> Void)?
+    public var onConfirmPair: (() async -> Void)?
+    public var onRejectPair:  ((String) async -> Void)?
+
     public init(
         preflight: RemoteLoginPreflight = RemoteLoginPreflight(),
         fdaChecker: FullDiskAccessChecker = FullDiskAccessChecker()
     ) {
         self.preflight = preflight
         self.fdaChecker = fdaChecker
+    }
+
+    public func acceptPair() async {
+        await onAcceptPair?()
+    }
+    public func confirmPair() async {
+        await onConfirmPair?()
+    }
+    public func rejectPair(reason: String) async {
+        await onRejectPair?(reason)
     }
 
     // MARK: - Step transitions
