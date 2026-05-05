@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync v1.1.0 — Defense in Depth + 실작동 검증</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root { --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff; --success: #3fb950; --warning: #d29922; --error: #f85149; --critical: #b62324; --font-body: "Inter", system-ui, sans-serif; --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  code, pre { font-family: var(--font-mono); font-size: 13px; }
+  .page { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--border); background: var(--surface); }
+  .toc h2 { font-size: 13px; text-transform: uppercase; color: var(--text-muted); margin: 0 0 12px 0; letter-spacing: 0.05em; }
+  .toc ol { list-style: none; padding: 0; margin: 0; }
+  .toc li { margin: 6px 0; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--text-muted); font-size: 13px; }
+  .toc a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+  .toc a.active { background: var(--surface-2); color: var(--accent); font-weight: 500; }
+  main { padding: 40px 56px 80px; max-width: 1100px; }
+  .header { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .header h1 { margin: 0 0 12px 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .meta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent); font-size: 11px; font-weight: 600; }
+  section { margin-bottom: 56px; scroll-margin-top: 16px; }
+  h2 { font-size: 22px; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 8px 0; color: var(--text); font-weight: 600; }
+  p { margin: 8px 0 12px 0; }
+  ul, ol { padding-left: 22px; margin: 8px 0 16px 0; }
+  li { margin: 4px 0; }
+  .table-wrap { overflow-x: auto; margin: 12px 0 16px 0; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--surface-2); }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,0.018); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .sev-critical { color: #f85149; font-weight: 700; }
+  .sev-high { color: #d29922; font-weight: 600; }
+  .sev-med { color: #58a6ff; }
+  pre.code-block { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; position: relative; }
+  pre.code-block code { color: var(--text); }
+  .code-lang { position: absolute; top: 6px; right: 12px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .keyword { color: #ff7b72; } .string { color: #a5d6ff; } .comment { color: #8b949e; font-style: italic; } .number { color: #79c0ff; }
+  .callout { border: 1px solid var(--border); border-left: 4px solid var(--accent); background: var(--surface); padding: 14px 18px; border-radius: 6px; margin: 14px 0; }
+  .callout.success { border-left-color: var(--success); }
+  .callout.warning { border-left-color: var(--warning); }
+  .callout.tip { border-left-color: #d2a8ff; }
+  .callout-title { font-weight: 600; margin-bottom: 4px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+  .metric { background: var(--surface); border: 1px solid var(--border); padding: 14px 16px; border-radius: 8px; }
+  .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric-value { font-size: 26px; font-weight: 700; margin: 6px 0 2px 0; color: var(--accent); }
+  .metric-sub { font-size: 12px; color: var(--text-muted); }
+  .chart-container { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin: 16px 0; }
+  .scroll-top { position: fixed; bottom: 24px; right: 24px; background: var(--accent); color: white; border: none; width: 40px; height: 40px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-size: 18px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .scroll-top.visible { opacity: 1; pointer-events: auto; }
+  @media (max-width: 900px) { .page { grid-template-columns: 1fr; } .toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); } main { padding: 24px; } }
+  @media print { body { background: white; color: black; } .toc, .scroll-top { display: none; } .page { display: block; } main { padding: 0; } h2, h3 { page-break-after: avoid; color: black; } pre.code-block, table, .callout { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#summary">1. Executive Summary</a></li>
+      <li><a href="#patches">2. v1.1 패치 (8 카테고리)</a></li>
+      <li><a href="#defense">3. 다층 방어 모델</a></li>
+      <li><a href="#single">4. 단일 인스턴스 + UX fix</a></li>
+      <li><a href="#tests">5. 테스트 (214/214)</a></li>
+      <li><a href="#verify">6. 실 작동 검증</a></li>
+      <li><a href="#release">7. Release 빌드</a></li>
+      <li><a href="#deferred">8. v1.2로 보류</a></li>
+    </ol>
+  </nav>
+  <main>
+    <header class="header">
+      <h1>ClaudeSync v1.1.0 — Defense in Depth + 실작동 검증</h1>
+      <div class="meta">
+        <span class="badge">Code · Project Status</span>
+        <span>📅 2026-05-05</span>
+        <span>✍️ Generated by Claude Code (Opus 4.7)</span>
+      </div>
+    </header>
+
+    <section id="summary">
+      <h2>1. Executive Summary</h2>
+      <p>v1.0.1까지 페어링이 실 동작 가능 상태가 됐고, v1.1.0에서 그 위에 <strong>다층 방어 (TLS + nonce + known_hosts + HMAC) + 자동 복구 + 중복실행 차단</strong>을 모두 추가했습니다. 사용자가 v1.0.1 빌드를 직접 실행해 발견한 UX 버그(pre-pair "no peer configured" 빨간 X)도 함께 수정.</p>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">테스트</div><div class="metric-value">214 / 214</div><div class="metric-sub">193 → 214 (+21)</div></div>
+        <div class="metric"><div class="metric-label">패치 카테고리</div><div class="metric-value">8</div><div class="metric-sub">SEC × 4 + RCA × 3 + UX</div></div>
+        <div class="metric"><div class="metric-label">Idle Footprint</div><div class="metric-value">25.2 MB</div><div class="metric-sub">PRD G4 50MB 충족</div></div>
+        <div class="metric"><div class="metric-label">DMG</div><div class="metric-value">1.7 MB</div><div class="metric-sub">ClaudeSync-1.1.0.dmg</div></div>
+        <div class="metric"><div class="metric-label">중복실행 차단</div><div class="metric-value" style="font-size:18px;">✅ 검증 완료</div><div class="metric-sub">두 번째 launch 즉시 exit</div></div>
+        <div class="metric"><div class="metric-label">Bonjour 광고</div><div class="metric-value" style="font-size:18px;">✅ 검증 완료</div><div class="metric-sub">dns-sd로 UUID 발견</div></div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-title">✅ v1.1.0 도달</div>
+        실 운영 가능 상태. 사용자 자격증명(Developer ID + Apple ID) 필요한 작업만 남음.
+      </div>
+    </section>
+
+    <section id="patches">
+      <h2>2. v1.1 패치 (8 카테고리)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>위협/문제</th><th>패치</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev-critical">SEC-002</span></td>
+                <td>Bonjour control channel 평문 → passive sniffer가 fingerprint 등 metadata 캡처</td>
+                <td><strong>NWProtocolTLS.Options + self-signed P-256 cert</strong>. openssl로 cert 생성 → SecPKCS12Import → SecIdentity. Custom verify block: pre-pairing TOFU, paired 후 SHA-256 cert pinning</td></tr>
+            <tr><td><span class="sev-critical">SEC-003</span></td>
+                <td>6자리 코드 derive에 nonce 없음 → key replay 공격 가능</td>
+                <td>16-byte 랜덤 nonce를 PairRequest/Accept에 포함, 코드 derive에 합산. 한 세션 1회 시도 enforcement</td></tr>
+            <tr><td><span class="sev-high">SEC-005</span></td>
+                <td>SSH <code>StrictHostKeyChecking=accept-new</code> TOFU → 첫 연결 MITM 가능</td>
+                <td>페어링 시 peer SSH host key를 PairAccept에 포함 → ~/.claudesync/ssh/known_hosts에 사전 등록 → rsync는 StrictHostKeyChecking=yes로 전환</td></tr>
+            <tr><td><span class="sev-high">SEC-009</span></td>
+                <td>~/.claudesync/preferences.json 무결성 보호 없음 → 같은 user의 멀웨어가 paired peer hostname 변조 가능</td>
+                <td>HMAC-SHA256 + .machine-key (0o600) → .preferences.json.sig sidecar. 변조 탐지 시 default fallback + 경고 로그</td></tr>
+            <tr><td><span class="sev-high">RCA-M5</span></td>
+                <td>NWListener .failed 시 자동 복구 없음</td>
+                <td>explicit listenerFailed/browserFailed 이벤트 + 3s cooldown으로 자동 재시작</td></tr>
+            <tr><td><span class="sev-high">RCA-M6</span></td>
+                <td>Wi-Fi flap 시 discovery silent 죽음</td>
+                <td>NWPathMonitor → networkLost/Recovered 이벤트 → discovery 재시작</td></tr>
+            <tr><td><span class="sev-high">RCA-M7</span></td>
+                <td>macOS sleep/wake 시 Bonjour 미복구</td>
+                <td>NSWorkspace willSleep/didWake 옵저버 → 슬립 전 정리, wake 후 재시작</td></tr>
+            <tr><td><span class="sev-high">RCA-M9</span></td>
+                <td>Clock skew 검출 없음 → newer-wins ConflictResolver가 잘못된 결정</td>
+                <td>페어링 시 timestamp 교환, ±30s 초과면 .failed</td></tr>
+            <tr><td><span class="sev-critical">UX</span></td>
+                <td>Pre-pair file change → "Failed: no peer configured" × N (사용자 v1.0.1 스크린샷에서 발견)</td>
+                <td>FileSyncActor.enqueue가 peer=nil 시 silent drop. setPeer(nil)이 큐 drain. SyncCoordinator가 잔존 "no peer" failure를 recentResults에서 제외</td></tr>
+            <tr><td><span class="sev-critical">BOOT</span></td>
+                <td>중복 실행 시 Bonjour port collision + FSEvents 중복 → 두 인스턴스 모두 쓸모 없음</td>
+                <td><strong>SingleInstanceGuard.enforce()</strong>가 ClaudeSyncApp.init에서 NSRunningApplication + ~/.claudesync/.app.pid 두 단계 검증 → 즉시 exit + 기존 인스턴스 활성화</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="defense">
+      <h2>3. 다층 방어 모델</h2>
+      <p>각 layer가 독립적으로 active/passive MITM을 차단합니다. 한 layer가 무너져도 다음 layer가 잡습니다.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Layer</th><th>매커니즘</th><th>차단하는 위협</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><strong>TLS (SEC-002)</strong></td><td>Passive sniffer · 페어링 metadata 캡처</td></tr>
+            <tr><td>2</td><td><strong>nonce in code (SEC-003)</strong></td><td>Replay 공격 · pre-computed 코드 사전 공격</td></tr>
+            <tr><td>3</td><td><strong>6-digit visual code</strong></td><td>Active MITM (사용자가 양 화면 코드 비교)</td></tr>
+            <tr><td>4</td><td><strong>Single-attempt enforcement</strong></td><td>Brute force 1M 코드 공간 시도</td></tr>
+            <tr><td>5</td><td><strong>Clock skew check (RCA-M9)</strong></td><td>Replay attack with stale timestamp · ConflictResolver 오류</td></tr>
+            <tr><td>6</td><td><strong>known_hosts + StrictHostKeyChecking (SEC-005)</strong></td><td>SSH transport MITM (rsync 시점)</td></tr>
+            <tr><td>7</td><td><strong>SSH wrapper (v1.0.1 SEC-001)</strong></td><td>authorized_keys 명령 인젝션</td></tr>
+            <tr><td>8</td><td><strong>Hostname allow-list (v1.0.1 SEC-006)</strong></td><td>Shell meta in peer name</td></tr>
+            <tr><td>9</td><td><strong>Security excludes first (v1.0.1 SEC-008)</strong></td><td>User pattern이 secret 패턴 shadow</td></tr>
+            <tr><td>10</td><td><strong>Preferences HMAC (SEC-009)</strong></td><td>같은 user 멀웨어가 paired peer hostname 변조</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="single">
+      <h2>4. 단일 인스턴스 + UX fix (사용자 요청 직접 대응)</h2>
+
+      <h3>4.1 Pre-pair UX bug — 사용자 스크린샷에서 발견</h3>
+      <p>v1.0.1 빌드를 직접 실행한 사용자가 보낸 스크린샷에 <strong>"Failed: no peer configured" × 5</strong>가 누적된 것이 보였습니다. 페어링 전 상태에서 FileWatcher가 file change를 잡고 → SyncCoordinator가 sync job을 enqueue → FileSyncActor가 peer=nil로 즉시 fail → 빨간 X 5개가 사용자에게 노출.</p>
+      <p><strong>v1.1 fix</strong>: <code>FileSyncActor.enqueue</code>가 peer=nil 시 silent drop. <code>setPeer(nil)</code>이 큐 drain. <code>SyncCoordinator</code>가 "no peer" string을 recentResults에서 필터링.</p>
+
+      <h3>4.2 단일 인스턴스 enforcement</h3>
+      <p>두 인스턴스 동시 실행 시: NWListener bind 실패 / 두 FSEvents 스트림 중복 fire / 동일 PID 영속화 race. <code>SingleInstanceGuard</code>가 두 단계 검증:</p>
+      <ol>
+        <li><strong>NSRunningApplication scan</strong>: 같은 bundleId 다른 PID 검색</li>
+        <li><strong>~/.claudesync/.app.pid sentinel</strong>: 파일 내용을 PID로 읽고 <code>kill(pid, 0)</code>로 liveness 확인</li>
+      </ol>
+      <p>중복 발견 시: 기존 인스턴스 activate → stderr에 명확한 메시지 → exit. graceful shutdown에서 sentinel 정리; SIGKILL 등 비정상 종료의 stale sentinel은 다음 launch에서 자동 정리.</p>
+
+<pre class="code-block" data-language="bash"><span class="code-lang">live verification</span><code><span class="comment"># Launch primary</span>
+$ ClaudeSync.app/Contents/MacOS/ClaudeSync &amp;
+[1] 43539
+
+<span class="comment"># Try second instance</span>
+$ ClaudeSync.app/Contents/MacOS/ClaudeSync
+ClaudeSync: another instance (pid 43539) is already running.
+            Activating it and exiting.
+
+<span class="comment"># Sentinel correctly created with 0o600</span>
+$ ls -la ~/.claudesync/.app.pid
+-rw-------  KimSejun  staff  5  2026-05-05 21:33  /Users/kimsejun/.claudesync/.app.pid
+$ cat ~/.claudesync/.app.pid
+43539
+</code></pre>
+    </section>
+
+    <section id="tests">
+      <h2>5. 테스트 결과 (214/214 PASS)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>스위트</th><th>테스트 수</th><th>설명</th></tr></thead>
+          <tbody>
+            <tr><td>기존 25 스위트</td><td>193 (그대로)</td><td>회귀 없음. PairingManager checks 순서 변경에 따른 1개 테스트 갱신만</td></tr>
+            <tr><td><strong>V11RegressionTests</strong> (신규)</td><td><strong>20</strong></td><td>v1.1의 모든 SEC/RCA/SingleInstance fix 회귀 안전망</td></tr>
+            <tr><td>FileSyncActorTests</td><td>+1 (drained queue)</td><td>setPeer(nil) drain 검증</td></tr>
+            <tr><td><strong>합계</strong></td><td><strong>214</strong></td><td>11.9초</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="chart-container">
+        <canvas id="testGrowth" height="120"></canvas>
+      </div>
+
+      <h3>V11RegressionTests 항목 (20)</h3>
+      <ul>
+        <li>SEC-009: HMAC sign/verify roundtrip · key 0o600 · tampered fallback · v1.0.x upgrade trust-once</li>
+        <li>RCA-M9: clock-skew over limit ⇒ .failed</li>
+        <li>SEC-003: nonce alters code · different nonces produce different codes · 16-byte length · hex roundtrip · second pairRequest rejected</li>
+        <li>SEC-005: registerKnownHost 0o600 · replaces existing · StrictHostKeyChecking=yes when path set · accept-new fallback when empty</li>
+        <li>RCA-M5/M6/M7: NetworkResilienceMonitor start/stop without leak</li>
+        <li>SEC-002: TLSCertificateProvider generates SecIdentity · 64-char SHA-256 hex fingerprint · key+p12 0o600</li>
+        <li>SingleInstanceGuard: primary on fresh home · self-PID treated as primary · stale dead-PID treated as primary · releaseSentinel removes file</li>
+        <li>UX: pre-pair enqueue does NOT emit failure into recentResults</li>
+      </ul>
+    </section>
+
+    <section id="verify">
+      <h2>6. 실 작동 검증</h2>
+      <p>사용자가 명시적으로 요청: "중복실행을 막고 이 앱이 완전하게 작동가능한 상태로 구현되었는지 확인하고 검증하세요."</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>검증 항목</th><th>방법</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr><td>메뉴바 트레이 등장</td><td>v1.0.1 사용자 스크린샷</td><td>✅ LSUIElement, 안테나 아이콘 표시</td></tr>
+            <tr><td>Bonjour 광고</td><td><code>dns-sd -B _claudesync._tcp local.</code></td><td>✅ UUID B2706A31-...로 발견</td></tr>
+            <tr><td>Physical Footprint</td><td><code>heap PID</code></td><td>✅ <strong>25.2 MB</strong> (PRD G4 50MB 충족, 50% margin)</td></tr>
+            <tr><td>중복실행 차단</td><td>두 번째 launch 시도</td><td>✅ stderr 메시지 후 즉시 exit, 기존 인스턴스 활성화</td></tr>
+            <tr><td>Sentinel 권한</td><td><code>ls -la ~/.claudesync/.app.pid</code></td><td>✅ 0o600 (-rw-------)</td></tr>
+            <tr><td>Stale PID 자동 처리</td><td>kill -9 후 재launch</td><td>✅ kill(pid, 0) check로 stale로 분류 → primary로 진행</td></tr>
+            <tr><td>0 memory leaks</td><td><code>leaks PID</code></td><td>✅ "0 leaks for 0 total leaked bytes"</td></tr>
+            <tr><td>Universal binary</td><td><code>lipo -info</code></td><td>✅ x86_64 + arm64</td></tr>
+            <tr><td>전체 테스트</td><td><code>xcodebuild test</code></td><td>✅ 214/214 PASS, 11.9s</td></tr>
+            <tr><td>DMG 생성</td><td><code>scripts/package.sh</code></td><td>✅ ClaudeSync-1.1.0.dmg, 1.7 MB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="release">
+      <h2>7. Release 빌드</h2>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Architectures</div><div class="metric-value" style="font-size:18px;">arm64 + x86_64</div></div>
+        <div class="metric"><div class="metric-label">Bundle</div><div class="metric-value">4.7 MB</div><div class="metric-sub">+0.1MB vs v1.0.1 (TLS provider + NetworkResilience + SingleInstanceGuard)</div></div>
+        <div class="metric"><div class="metric-label">DMG</div><div class="metric-value">1.7 MB</div></div>
+        <div class="metric"><div class="metric-label">Footprint</div><div class="metric-value">25.2 MB</div><div class="metric-sub">+1.7MB vs v1.0.1 (TLS / monitor 추가)</div></div>
+        <div class="metric"><div class="metric-label">Version</div><div class="metric-value" style="font-size:20px;">1.1.0 (3)</div></div>
+      </div>
+    </section>
+
+    <section id="deferred">
+      <h2>8. v1.2로 의도적 보류</h2>
+      <ul>
+        <li><strong>TLS cert pinning 영속화</strong> — 현재 in-memory만, 재시작 시 첫 연결은 다시 TOFU. PairedPeerRecord에 fingerprint 추가하면 됨</li>
+        <li><strong>AppIcon</strong> — placeholder 그대로, 디자이너 작업물로 교체</li>
+        <li><strong>Sync 일시정지 UI</strong> + 충돌 보관함 정리 UI</li>
+        <li><strong>BrewSyncManager / NpmGlobalSyncManager</strong> — Phase 6 잔여</li>
+        <li><strong>Bandwidth limit 슬라이더 UX 개선</strong></li>
+      </ul>
+    </section>
+  </main>
+</div>
+<button class="scroll-top" id="scrollTop" aria-label="Back to top">↑</button>
+<script>
+  const links = document.querySelectorAll('.toc a');
+  const sections = document.querySelectorAll('main section');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.toc a[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+  links.forEach(l => l.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const id = l.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  const btn = document.getElementById('scrollTop');
+  window.addEventListener('scroll', () => btn.classList.toggle('visible', window.scrollY > 400));
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+  new Chart(document.getElementById('testGrowth').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: ['Phase 1', 'Phase 2+3', 'Phase 4', 'Phase 5', 'Phase 6', 'v0.2', 'v0.3', 'v1.0-rc1', 'v1.0.1', 'v1.1.0'],
+      datasets: [{
+        label: 'Test count',
+        data: [4, 89, 121, 145, 158, 158, 162, 177, 193, 214],
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,0.15)',
+        tension: 0.25,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: '테스트 누적 추이 (214 도달)', color: '#e6edf3' },
+        legend: { labels: { color: '#e6edf3' } }
+      },
+      scales: {
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, beginAtZero: true },
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+</script>
+</body>
+</html>
