@@ -1,6 +1,33 @@
 # ClaudeSync — Handoff Document
 
-## Project Status: PRD + Specs 완료, Momus 검증 수정 진행중
+## Project Status: Phase 1 (Xcode 스켈레톤) 완료, Phase 2 진입 대기
+
+### Phase 1 완료 내역 (2026-05-05)
+
+| 산출물 | 경로 |
+|--------|------|
+| xcodegen 매니페스트 | `project.yml` |
+| Xcode 프로젝트 | `ClaudeSync.xcodeproj/` |
+| @main + MenuBarExtra(.window) | `ClaudeSync/App/ClaudeSyncApp.swift` |
+| @Observable DI 컨테이너 | `ClaudeSync/App/AppEnvironment.swift` |
+| 메뉴바 popover (320pt) | `ClaudeSync/UI/MenuBarRootView.swift` |
+| async Process wrapper | `ClaudeSync/Utilities/ProcessRunner.swift` |
+| os.Logger + 10MB 롤링 파일 | `ClaudeSync/Utilities/Logger.swift` |
+| Info.plist (LSUIElement, NSBonjourServices) | `ClaudeSync/Resources/Info.plist` |
+| 엔타이틀먼트 (no sandbox, network) | `ClaudeSync/Resources/ClaudeSync.entitlements` |
+| 4개 스모크 테스트 | `ClaudeSyncTests/SmokeTests.swift` |
+
+**검증 결과**: clean build OK, 4/4 unit tests pass, 앱 실행 후 t=5s 생존(메뉴바 영속), SIGTERM 정상 종료, ~/.claudesync/logs/claudesync.log 자동 생성.
+
+**Phase 4 hardening 후속과제 (Phase 1 비차단)**:
+- RSS 77.5MB (PRD G4 <50MB 목표 초과 — Debug 빌드 unwarmed; Release 측정 필요)
+- Assets.car 미생성 (AppIcon/AccentColor 비어있음 — 메뉴바는 SF Symbol 사용 중이라 무영향)
+- Universal binary 미설정 (현재 arm64만; ARCHS=arm64 x86_64 Phase 4에서 추가)
+- Adhoc 서명 (Developer ID 서명/공증은 Phase 4)
+
+---
+
+## Original Status (Phase 0 종료): PRD + Specs 완료, Momus 검증 수정 진행중
 
 ### Quick Start
 ```bash
