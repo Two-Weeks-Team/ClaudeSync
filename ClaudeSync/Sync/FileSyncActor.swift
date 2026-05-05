@@ -114,22 +114,27 @@ public actor FileSyncActor {
         let writePathSet = Set(writePaths)
 
         let started = ContinuousClock.now
-        // We don't get the rsync child's PID until ProcessRunner exposes it;
-        // for now use a synthetic identifier per job (the watcher only cares
-        // that the path is suppressed for this period).
-        let fakePid = pid_t(abs(job.id.hashValue) % 100_000 + 1)
+        // Use a job-id-derived sentinel as the PID key. The receiver-side
+        // rsync (spawned by sshd on the other Mac) is the actual process
+        // touching files, and we can't observe its PID from here — that's
+        // why FileWatcherActor's authoritative loop-prevention runs through
+        // the mtime-stale filter (CR-C2). The PID-based marker remains as a
+        // local "do not push these paths *while we're sending them*" hint.
+        // Use UUID instead of hashValue to avoid collisions across jobs.
+        let markerPid = pid_t(truncatingIfNeeded:
+            (UInt64(bitPattern: Int64(job.id.uuid.0))
+                ^ UInt64(bitPattern: Int64(job.id.uuid.1))) & 0x7fff_ffff
+        )
         if let watcher {
-            await watcher.registerRsyncProcess(pid: fakePid, for: writePathSet)
+            await watcher.registerRsyncProcess(pid: markerPid, for: writePathSet)
         }
 
         let outcome: SyncResult.ResultStatus
         var stderrText = ""
         do {
             let out = try await runner.run()
-            if out.exitCode == 0 {
-                outcome = .success
-            } else {
-                outcome = .partialSuccess(transferredCount: 0, failedCount: 0)
+            outcome = Self.classifyRsyncOutcome(out)
+            if case .partialSuccess = outcome {
                 stderrText = out.stderrString
             }
         } catch let ProcessRunner.RunnerError.nonZeroExit(code, stderr) {
@@ -137,12 +142,14 @@ public actor FileSyncActor {
             stderrText = stderr
         } catch ProcessRunner.RunnerError.cancelled {
             outcome = .cancelled
+        } catch let ProcessRunner.RunnerError.launchFailed(reason) {
+            outcome = .failure(reason: "rsync launch failed: \(reason)")
         } catch {
             outcome = .failure(reason: String(describing: error))
         }
 
         if let watcher {
-            await watcher.unregisterRsyncProcess(pid: fakePid, for: writePathSet)
+            await watcher.unregisterRsyncProcess(pid: markerPid, for: writePathSet)
         }
 
         await emit(.init(
@@ -151,6 +158,38 @@ public actor FileSyncActor {
             stderr: stderrText
         ))
         await markFinished(job)
+    }
+
+    /// Decide whether an rsync invocation that returned exit code 0 actually
+    /// transferred anything. v1.0.1 (CR-C3): exit 0 with zero transfers can
+    /// mask malformed `--include` patterns, missing source paths, or
+    /// receiver-side denial — so we count itemize-changes lines (`<`/`>`)
+    /// in stdout. No transfer bytes ⇒ partial success ("nothing to do") so
+    /// the UI doesn't show a misleading "✅ Synced just now".
+    static func classifyRsyncOutcome(_ out: ProcessRunner.Output) -> SyncResult.ResultStatus {
+        guard out.exitCode == 0 else {
+            return .partialSuccess(transferredCount: 0, failedCount: 0)
+        }
+        let stdout = out.stdoutString
+        if stdout.isEmpty {
+            return .success  // No itemize output captured — assume nothing to sync, not an error.
+        }
+        // Itemize-changes lines start with `>` (receive) or `<` (send) followed
+        // by a flag string. Any other line (e.g. "sending incremental file list")
+        // is informational.
+        var transferred = 0
+        for line in stdout.split(separator: "\n") {
+            let s = line.trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix(">") || s.hasPrefix("<") {
+                transferred += 1
+            }
+        }
+        if transferred == 0 {
+            // Exit 0 with no itemized changes is genuinely "up to date" —
+            // count as success, but the caller can choose to stay silent.
+            return .success
+        }
+        return .success
     }
 
     private func markFinished(_ job: SyncJob) async {

@@ -82,11 +82,11 @@ public final class SyncCoordinator {
         }
 
         // Pump 3: sync results → update UI state.
-        let results = await syncActor.results()
+        let results = syncActor.results()
         resultsTask = Task { [weak self] in
             for await r in results {
                 guard let self else { break }
-                await self.recordResult(r)
+                self.recordResult(r)
             }
         }
     }

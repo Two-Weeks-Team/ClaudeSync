@@ -19,19 +19,29 @@ public actor FileWatcherActor {
         public let debounceQuietPeriod: Duration
         public let debounceCoalesce: Duration
         public let fsEventsLatency: CFTimeInterval
+        /// v1.0.1 (CR-C2 fix): drop FSEvents whose subject file has an
+        /// `mtime` older than this threshold. rsync `--archive` preserves
+        /// the *source's* mtime when writing on the receiver, so an echo
+        /// from a remote push appears as a "new event for an old file".
+        /// User-initiated edits, by contrast, always touch mtime to "now".
+        /// Default 5s gives plenty of slack for filesystem latency while
+        /// reliably catching cross-Mac echoes.
+        public let echoStaleMtimeThreshold: Duration
 
         public init(
             homeDirectory: URL = URL(fileURLWithPath: NSHomeDirectory()),
             ignore: IgnorePatterns = IgnorePatterns(),
             debounceQuietPeriod: Duration = .seconds(2),
             debounceCoalesce: Duration = .milliseconds(100),
-            fsEventsLatency: CFTimeInterval = 0.3
+            fsEventsLatency: CFTimeInterval = 0.3,
+            echoStaleMtimeThreshold: Duration = .seconds(5)
         ) {
             self.homeDirectory = homeDirectory
             self.ignore = ignore
             self.debounceQuietPeriod = debounceQuietPeriod
             self.debounceCoalesce = debounceCoalesce
             self.fsEventsLatency = fsEventsLatency
+            self.echoStaleMtimeThreshold = echoStaleMtimeThreshold
         }
     }
 
@@ -164,11 +174,32 @@ public actor FileWatcherActor {
         //    to this path (or we're inside its 1-second buffer), drop the event.
         if shouldSuppress(path: path) { return }
 
-        // 2. Ignore patterns.
+        // 2. Mtime-stale echo filter (v1.0.1, CR-C2 root fix). rsync
+        //    --archive preserves the source's mtime on the receiver; if a
+        //    file on this Mac was just written by an incoming rsync, its
+        //    mtime is the *original* edit time on the other Mac — which is
+        //    seconds in the past relative to right now. Genuine local edits
+        //    always set mtime ≈ now. So: if the FSEvent fires for a file
+        //    whose mtime is more than `echoStaleMtimeThreshold` old, treat
+        //    it as an echo and drop. This is the actual mechanism that
+        //    breaks the two-Mac ping-pong loop.
+        if isLikelyEchoByMtime(path: path) { return }
+
+        // 3. Ignore patterns.
         if config.ignore.shouldIgnore(absolutePath: path, target: target) { return }
 
-        // 3. Hand to the debouncer.
+        // 4. Hand to the debouncer.
         await debouncer.addPaths([path], for: target)
+    }
+
+    private func isLikelyEchoByMtime(path: String) -> Bool {
+        var stbuf = stat()
+        guard stat(path, &stbuf) == 0 else { return false }
+        let mtimeSec = TimeInterval(stbuf.st_mtimespec.tv_sec)
+        let nowSec = Date().timeIntervalSince1970
+        let ageSec = nowSec - mtimeSec
+        let thresholdSec = TimeInterval(config.echoStaleMtimeThreshold.components.seconds)
+        return ageSec > thresholdSec
     }
 
     private func shouldSuppress(path: String) -> Bool {

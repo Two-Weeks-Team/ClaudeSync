@@ -85,10 +85,15 @@ public struct PairRequestPayload: Codable, Equatable, Sendable {
     public let publicKey: String           // Full OpenSSH ssh-ed25519 line
     public let publicKeyFingerprint: String
     public let protocolVersion: Int
+    /// v1.0.1: initiator's local sshd port (CR-I1). Without this the responder
+    /// could only assume port 22 and rsync from B→A would fail when A's sshd
+    /// listens on a non-standard port.
+    public let sshPort: UInt16
 
     public init(
         machineId: UUID, hostname: String, username: String,
-        publicKey: String, publicKeyFingerprint: String, protocolVersion: Int = 1
+        publicKey: String, publicKeyFingerprint: String,
+        protocolVersion: Int = 1, sshPort: UInt16 = 22
     ) {
         self.machineId = machineId
         self.hostname = hostname
@@ -96,6 +101,23 @@ public struct PairRequestPayload: Codable, Equatable, Sendable {
         self.publicKey = publicKey
         self.publicKeyFingerprint = publicKeyFingerprint
         self.protocolVersion = protocolVersion
+        self.sshPort = sshPort
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case machineId, hostname, username, publicKey,
+             publicKeyFingerprint, protocolVersion, sshPort
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.machineId = try c.decode(UUID.self, forKey: .machineId)
+        self.hostname = try c.decode(String.self, forKey: .hostname)
+        self.username = try c.decode(String.self, forKey: .username)
+        self.publicKey = try c.decode(String.self, forKey: .publicKey)
+        self.publicKeyFingerprint = try c.decode(String.self, forKey: .publicKeyFingerprint)
+        self.protocolVersion = try c.decodeIfPresent(Int.self,
+                                                     forKey: .protocolVersion) ?? 1
+        self.sshPort = try c.decodeIfPresent(UInt16.self, forKey: .sshPort) ?? 22
     }
 }
 

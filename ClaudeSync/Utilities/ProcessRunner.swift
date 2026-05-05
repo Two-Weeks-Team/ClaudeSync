@@ -31,6 +31,15 @@ public actor ProcessRunner {
 
     private var currentProcess: Process?
 
+    /// PID of the running child process, or nil before launch / after exit.
+    /// v1.0.1 (CR-C2 / RCA-M11): exposed so callers can register the *real*
+    /// PID with FileWatcherActor for echo suppression instead of synthesising
+    /// a fake one.
+    public var pid: pid_t? {
+        guard let p = currentProcess, p.isRunning else { return nil }
+        return p.processIdentifier
+    }
+
     public init(
         executable: String,
         arguments: [String] = [],

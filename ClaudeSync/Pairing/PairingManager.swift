@@ -136,13 +136,18 @@ public actor PairingManager {
                 currentState: String(describing: state), action: "initiate"
             )
         }
+        guard let pubkeyLine = localPubkeyLine,
+              let fingerprint = localPubkeyFingerprint else {
+            throw PairingError.keyManagementFailed("local key material not loaded")
+        }
 
         let payload = PairRequestPayload(
             machineId: identity.machineId,
             hostname: identity.hostname,
             username: identity.username,
-            publicKey: localPubkeyLine!,
-            publicKeyFingerprint: localPubkeyFingerprint!
+            publicKey: pubkeyLine,
+            publicKeyFingerprint: fingerprint,
+            sshPort: identity.sshPort
         )
         do {
             try await channel.send(.pairRequest(payload))
@@ -163,12 +168,16 @@ public actor PairingManager {
             )
         }
 
+        guard let pubkeyLine = localPubkeyLine,
+              let fingerprint = localPubkeyFingerprint else {
+            throw PairingError.keyManagementFailed("local key material not loaded")
+        }
         let payload = PairAcceptPayload(
             machineId: identity.machineId,
             hostname: identity.hostname,
             username: identity.username,
-            publicKey: localPubkeyLine!,
-            publicKeyFingerprint: localPubkeyFingerprint!,
+            publicKey: pubkeyLine,
+            publicKeyFingerprint: fingerprint,
             sshPort: identity.sshPort
         )
         do {
@@ -282,8 +291,19 @@ public actor PairingManager {
                            category: "pairing")
             return
         }
-        let peerKeyBytes = (try? Self.parsePublicKeyBytes(from: req.publicKey)) ?? Data()
-        let myKeyBytes  = localPubkeyBytes ?? Data()
+        // v1.0.1: refuse a request whose key we cannot parse, or while our
+        // own local key material isn't loaded yet. Falling back to empty Data
+        // would let two peers compute the SAME code from empty bytes (and
+        // accept the pairing), which is a security hole.
+        guard let peerKeyBytes = try? Self.parsePublicKeyBytes(from: req.publicKey),
+              !peerKeyBytes.isEmpty else {
+            await transition(to: .failed(message: "peer public key is malformed"))
+            return
+        }
+        guard let myKeyBytes = localPubkeyBytes, !myKeyBytes.isEmpty else {
+            await transition(to: .failed(message: "local public key not loaded"))
+            return
+        }
         // Initiator key is *peer*'s here (they sent the pairRequest).
         let code = PairingCodeGenerator.generateCode(
             initiatorPublicKey: peerKeyBytes,
@@ -298,8 +318,15 @@ public actor PairingManager {
                            category: "pairing")
             return
         }
-        let peerKeyBytes = (try? Self.parsePublicKeyBytes(from: accept.publicKey)) ?? Data()
-        let myKeyBytes  = localPubkeyBytes ?? Data()
+        guard let peerKeyBytes = try? Self.parsePublicKeyBytes(from: accept.publicKey),
+              !peerKeyBytes.isEmpty else {
+            await transition(to: .failed(message: "peer public key is malformed"))
+            return
+        }
+        guard let myKeyBytes = localPubkeyBytes, !myKeyBytes.isEmpty else {
+            await transition(to: .failed(message: "local public key not loaded"))
+            return
+        }
         // We were the initiator, peer is the responder.
         let code = PairingCodeGenerator.generateCode(
             initiatorPublicKey: myKeyBytes,
@@ -327,7 +354,7 @@ public actor PairingManager {
             username: req.username,
             publicKey: req.publicKey,
             publicKeyFingerprint: req.publicKeyFingerprint,
-            sshPort: 22
+            sshPort: req.sshPort
         )
         await transition(to: .completed(paired))
     }

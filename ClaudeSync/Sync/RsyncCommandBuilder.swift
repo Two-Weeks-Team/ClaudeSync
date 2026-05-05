@@ -83,29 +83,39 @@ public struct RsyncCommandBuilder: Sendable {
             args += ["--bwlimit=\(bandwidthLimitKBps)"]
         }
 
-        // Per-target excludes.
-        for pattern in job.target.spec.excludePatterns {
-            args += ["--exclude", pattern]
+        // rsync evaluates filter rules **first match wins**. v1.0.1
+        // (RCA-M2): emit `--include` rules BEFORE `--exclude` so that a
+        // user-requested incremental sync of a specific file under a
+        // normally-excluded directory still goes through. Within the
+        // exclude block, security patterns must come first so a
+        // user-supplied include can never shadow them (SEC-008).
+        let basePath = job.target.spec.basePath.expandingTildeInPath
+
+        // Includes (when targeting specific paths only).
+        if !job.isFullSync {
+            for absolute in job.paths {
+                guard let relative = relativePath(of: absolute, under: basePath) else {
+                    continue  // RCA P2 #10: silently drop paths outside basePath.
+                }
+                args += ["--include", relative]
+            }
+            // Allow rsync to descend through parent directories of the
+            // included files, but block everything else.
+            args += ["--include", "*/"]
         }
-        // User-supplied extras for this target.
-        for pattern in userExtraExcludes[job.target] ?? [] {
-            args += ["--exclude", pattern]
-        }
-        // Always-enforced security excludes.
+
+        // Excludes — security first, then per-target, then user extras.
         for pattern in IgnorePatterns.security {
             args += ["--exclude", pattern]
         }
-
-        // Specific paths vs full sync.
-        let basePath = job.target.spec.basePath.expandingTildeInPath
+        for pattern in job.target.spec.excludePatterns {
+            args += ["--exclude", pattern]
+        }
+        for pattern in userExtraExcludes[job.target] ?? [] {
+            args += ["--exclude", pattern]
+        }
         if !job.isFullSync {
-            // Use a files-from-style include filter set: include the listed
-            // paths and their parent dirs, exclude everything else.
-            for absolute in job.paths {
-                let relative = relativePath(of: absolute, under: basePath) ?? absolute
-                args += ["--include", relative]
-            }
-            args += ["--include", "*/", "--exclude", "*"]
+            args += ["--exclude", "*"]
         }
 
         let localTrailing = ensureTrailingSlash(basePath)

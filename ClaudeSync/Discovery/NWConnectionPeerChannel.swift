@@ -51,16 +51,27 @@ public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
 
     public func incomingMessages() -> AsyncStream<ControlMessage> {
         AsyncStream<ControlMessage> { continuation in
-            let alreadyStarted = self.state.withLock { st -> Bool in
-                st.continuation?.finish()
+            // CR-I2: extract the previous continuation from inside the lock,
+            // then finish it AFTER releasing the lock — calling .finish()
+            // can synchronously invoke onTermination, which re-acquires the
+            // same non-reentrant unfair lock and would deadlock.
+            struct Swap { var oldCont: AsyncStream<ControlMessage>.Continuation?; var alreadyStarted: Bool }
+            let swap: Swap = self.state.withLock { st -> Swap in
+                let prev = st.continuation
                 st.continuation = continuation
                 let already = st.isStarted
                 st.isStarted = true
-                return already
+                return Swap(oldCont: prev, alreadyStarted: already)
             }
+            swap.oldCont?.finish()
+            let alreadyStarted = swap.alreadyStarted
 
             continuation.onTermination = { [weak self] _ in
-                self?.state.withLock { st in st.continuation = nil }
+                self?.state.withLock { st in
+                    // Only clear if it's still ours — a newer subscriber may
+                    // have already replaced us.
+                    if st.continuation != nil { st.continuation = nil }
+                }
             }
 
             if !alreadyStarted {

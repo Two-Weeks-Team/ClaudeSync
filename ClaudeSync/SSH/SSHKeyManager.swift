@@ -70,6 +70,14 @@ public actor SSHKeyManager {
     public var sshDirectoryURL: URL {
         homeDirectoryURL.appendingPathComponent(".ssh", isDirectory: true)
     }
+    /// v1.0.1 (SEC-001): the rsync-server wrapper script we install and
+    /// reference from the authorized_keys command= directive. Replacing the
+    /// old `${SSH_ORIGINAL_COMMAND#*--server …}` shell expansion with a
+    /// fixed-path script removes the ability for the peer to inject
+    /// arbitrary rsync flags or alternate executables.
+    public var rsyncWrapperURL: URL {
+        homeDirectoryURL.appendingPathComponent(".claudesync/bin/rsync-server-wrapper")
+    }
 
     // MARK: - Generation
 
@@ -196,10 +204,19 @@ public actor SSHKeyManager {
 
     /// Append the peer's public key with a `restrict,command="…rsync server…"`
     /// prefix so the key cannot be used for arbitrary remote execution.
+    ///
+    /// v1.0.1 (SEC-001): the command line now points at a fixed wrapper
+    /// script (`~/.claudesync/bin/rsync-server-wrapper`) instead of doing
+    /// in-shell `${SSH_ORIGINAL_COMMAND}` parameter expansion. The wrapper
+    /// validates the incoming arguments against an allowlist before invoking
+    /// rsync, so a compromised peer can't sneak in `--config=`/`--rsh=`
+    /// flags via the SSH command channel.
     public func installPeerKey(_ peerPublicKey: String) throws {
         let trimmed = peerPublicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        try installRsyncWrapperIfMissing()
+        let wrapperPath = rsyncWrapperURL.path
         let entry = """
-        restrict,command="/usr/bin/rsync --server ${SSH_ORIGINAL_COMMAND#*--server }",no-port-forwarding,no-X11-forwarding,no-agent-forwarding \(trimmed)
+        restrict,command="\(wrapperPath)",no-port-forwarding,no-X11-forwarding,no-agent-forwarding \(trimmed)
         """
 
         try ensureSSHDirectory()
@@ -291,4 +308,87 @@ public actor SSHKeyManager {
             )
         }
     }
+
+    /// v1.0.1 (SEC-001): install the rsync-server wrapper script that
+    /// authorized_keys' command= directive points at. The wrapper validates
+    /// the SSH-supplied command line against an allowlist before exec'ing
+    /// rsync, blocking attacker injection of `--config`, `--rsh`,
+    /// `--daemon`, or arbitrary executables.
+    ///
+    /// Idempotent: only writes when the file is missing OR the on-disk
+    /// content differs from the bundled script (so app upgrades replace it).
+    public func installRsyncWrapperIfMissing() throws {
+        let fm = FileManager.default
+        try fm.createDirectory(
+            at: rsyncWrapperURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let desired = Self.rsyncWrapperScript
+        let current = (try? String(contentsOf: rsyncWrapperURL, encoding: .utf8)) ?? ""
+        if current != desired {
+            try desired.write(to: rsyncWrapperURL, atomically: true, encoding: .utf8)
+        }
+        try fm.setAttributes([.posixPermissions: 0o700],
+                             ofItemAtPath: rsyncWrapperURL.path)
+    }
+
+    /// Inline POSIX-sh script content. Validates `$SSH_ORIGINAL_COMMAND`:
+    ///
+    /// * Must start with `rsync ` (allowing the GNU or openrsync server
+    ///   invocation rsync uses internally).
+    /// * Must not contain backticks, semicolons, pipes, redirects, or any
+    ///   `--config=`/`--rsh=`/`--daemon` flag.
+    ///
+    /// Anything that passes validation is dispatched to the system rsync
+    /// with `--server` enforced.
+    static let rsyncWrapperScript: String = #"""
+    #!/bin/sh
+    # ClaudeSync rsync-server wrapper (v1.0.1 SEC-001)
+    # Validates SSH_ORIGINAL_COMMAND against an allowlist before invoking rsync.
+    set -eu
+
+    cmd="${SSH_ORIGINAL_COMMAND:-}"
+    if [ -z "$cmd" ]; then
+        echo "claudesync: SSH_ORIGINAL_COMMAND is empty" >&2
+        exit 1
+    fi
+
+    case "$cmd" in
+        *\`*|*\;*|*\|*|*\&*|*\>*|*\<*|*\$\(*)
+            echo "claudesync: refused — shell metacharacter in command" >&2
+            exit 1
+            ;;
+    esac
+
+    case "$cmd" in
+        *--config*|*--rsh*|*--daemon*|*--config=*)
+            echo "claudesync: refused — disallowed rsync flag" >&2
+            exit 1
+            ;;
+    esac
+
+    case "$cmd" in
+        rsync\ *)
+            ;;
+        *)
+            echo "claudesync: refused — only rsync invocations allowed" >&2
+            exit 1
+            ;;
+    esac
+
+    # Forward the validated arguments to the user's rsync (after the leading
+    # 'rsync ' token). Use the first rsync we can find in either Homebrew's
+    # path or the system path so this works on Sequoia (openrsync) and on
+    # machines where the user installed GNU rsync via brew.
+    rest=${cmd#rsync }
+    for candidate in /opt/homebrew/bin/rsync /usr/local/bin/rsync /usr/bin/rsync; do
+        if [ -x "$candidate" ]; then
+            # shellcheck disable=SC2086
+            exec "$candidate" $rest
+        fi
+    done
+    echo "claudesync: no rsync binary found" >&2
+    exit 1
+    """#
 }
