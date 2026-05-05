@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark" data-layout="scroll">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeSync v1.0-rc1 Hardening 완료 보고</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #30363d; --text: #e6edf3; --text-muted: #8b949e;
+    --accent: #58a6ff; --success: #3fb950; --warning: #d29922; --error: #f85149;
+    --critical: #b62324;
+    --font-body: "Inter", -apple-system, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: var(--font-mono); font-size: 13px; }
+  /* Layout */
+  .page { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .toc {
+    position: sticky; top: 0; align-self: start; height: 100vh;
+    overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .toc h2 { font-size: 13px; text-transform: uppercase; color: var(--text-muted);
+            margin: 0 0 12px 0; letter-spacing: 0.05em; }
+  .toc ol { list-style: none; padding: 0; margin: 0; }
+  .toc li { margin: 6px 0; }
+  .toc a {
+    display: block; padding: 6px 8px; border-radius: 6px;
+    color: var(--text-muted); font-size: 13px;
+  }
+  .toc a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+  .toc a.active { background: var(--surface-2); color: var(--accent); font-weight: 500; }
+  main { padding: 40px 56px 80px; max-width: 1100px; }
+  /* Header */
+  .header { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .header h1 { margin: 0 0 12px 0; font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+  .meta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--accent); font-size: 11px; font-weight: 600;
+  }
+  /* Sections */
+  section { margin-bottom: 56px; scroll-margin-top: 16px; }
+  h2 { font-size: 22px; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  h3 { font-size: 16px; margin: 24px 0 8px 0; color: var(--text); font-weight: 600; }
+  p { margin: 8px 0 12px 0; }
+  ul, ol { padding-left: 22px; margin: 8px 0 16px 0; }
+  li { margin: 4px 0; }
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 12px 0 16px 0; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--surface-2); }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,0.018); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  /* Code blocks */
+  pre.code-block {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; margin: 12px 0; position: relative;
+  }
+  pre.code-block code { color: var(--text); }
+  .code-lang {
+    position: absolute; top: 6px; right: 12px;
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .keyword { color: #ff7b72; }
+  .string  { color: #a5d6ff; }
+  .comment { color: #8b949e; font-style: italic; }
+  .number  { color: #79c0ff; }
+  .function{ color: #d2a8ff; }
+  .type    { color: #ffa657; }
+  /* Callouts */
+  .callout {
+    border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    background: var(--surface); padding: 14px 18px; border-radius: 6px; margin: 14px 0;
+  }
+  .callout.success  { border-left-color: var(--success); }
+  .callout.warning  { border-left-color: var(--warning); }
+  .callout.error    { border-left-color: var(--error); }
+  .callout.critical { border-left-color: var(--critical); background: rgba(255,30,30,0.04); }
+  .callout.tip      { border-left-color: #d2a8ff; }
+  .callout-title { font-weight: 600; margin-bottom: 4px; }
+  /* Metric cards */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+  .metric { background: var(--surface); border: 1px solid var(--border); padding: 14px 16px; border-radius: 8px; }
+  .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric-value { font-size: 26px; font-weight: 700; margin: 6px 0 2px 0; color: var(--accent); }
+  .metric-sub { font-size: 12px; color: var(--text-muted); }
+  .chart-container { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin: 16px 0; }
+  /* Back-to-top */
+  .scroll-top {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--accent); color: white; border: none;
+    width: 40px; height: 40px; border-radius: 999px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-size: 18px;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .scroll-top.visible { opacity: 1; pointer-events: auto; }
+  /* Responsive */
+  @media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; }
+    .toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main { padding: 24px; }
+  }
+  /* Print */
+  @media print {
+    body { background: white; color: black; }
+    .toc, .scroll-top { display: none; }
+    .page { display: block; }
+    main { padding: 0; }
+    h2, h3 { page-break-after: avoid; color: black; }
+    pre.code-block, table, .chart-container, .callout { page-break-inside: avoid; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#summary">1. Executive Summary</a></li>
+      <li><a href="#deliverables">2. v1.0-rc1 산출물</a></li>
+      <li><a href="#tests">3. 테스트 결과</a></li>
+      <li><a href="#decision">4. 핵심 결정 (RSS 트랩)</a></li>
+      <li><a href="#remaining">5. v1.0 잔여 작업</a></li>
+      <li><a href="#release">6. Release 빌드 결과</a></li>
+      <li><a href="#caveats">7. 알려진 제약</a></li>
+      <li><a href="#commits">8. 커밋 계획</a></li>
+      <li><a href="#wrap">9. 마무리</a></li>
+    </ol>
+  </nav>
+  <main>
+    <header class="header">
+      <h1>ClaudeSync v1.0-rc1 Hardening 완료 보고</h1>
+      <div class="meta">
+        <span class="badge">Code · Project Status</span>
+        <span>📅 2026-05-05</span>
+        <span>✍️ Generated by Claude Code</span>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="summary">
+      <h2>1. Executive Summary</h2>
+      <p>v0.3 (자동 페어링)에서 <strong>v1.0 출하 직전</strong>까지 자율 실행 가능한 모든 hardening을 완료했습니다.
+        Apple ID/키체인이 필요한 작업(Developer ID 서명, notarization)만 사용자에게 위임된 상태입니다.</p>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">테스트</div>
+          <div class="metric-value">177 / 177</div>
+          <div class="metric-sub">+15 신규, 24 스위트</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Idle Footprint</div>
+          <div class="metric-value">22.7 MB</div>
+          <div class="metric-sub">PRD G4 50MB ≫ 충족 (44% margin)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Universal Bundle</div>
+          <div class="metric-value">4.2 MB</div>
+          <div class="metric-sub">arm64 + x86_64 lipo verified</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">DMG</div>
+          <div class="metric-value">1.4 MB</div>
+          <div class="metric-sub">UDZO zlib 압축, ad-hoc 서명</div>
+        </div>
+      </div>
+      <div class="callout success">
+        <div class="callout-title">✅ 마일스톤 도달</div>
+        <strong>v0.1 MVP → v0.2 wiring → v0.3 auto-pairing → v1.0-rc1 hardening.</strong>
+        다음 세션에서 사용자 키체인만 있으면 즉시 v1.0 final 출하 가능.
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="deliverables">
+      <h2>2. v1.0-rc1 산출물</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>카테고리</th><th>파일</th><th>변경</th><th>역할</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>빌드 설정</td><td><code>project.yml</code></td><td>+9 / -2</td>
+                <td>ARCHS=arm64 x86_64, MARKETING_VERSION=1.0.0, configs.Debug/Release ONLY_ACTIVE_ARCH 분리</td></tr>
+            <tr><td>Launch</td><td><code>ClaudeSync/Utilities/LaunchAtLogin.swift</code></td><td>신규 65</td>
+                <td>SMAppService.mainApp wrapper, status 4-case enum</td></tr>
+            <tr><td>Persistence</td><td><code>ClaudeSync/Persistence/Preferences.swift</code></td><td>신규 95</td>
+                <td>Codable 모델 + actor 영속 store + sync 로딩 헬퍼</td></tr>
+            <tr><td>Sync</td><td><code>ClaudeSync/Sync/RsyncCommandBuilder.swift</code></td><td>+25</td>
+                <td><code>bandwidthLimitKBps</code>, <code>userExtraExcludes</code> 통합</td></tr>
+            <tr><td>Sync</td><td><code>ClaudeSync/Sync/FileSyncActor.swift</code></td><td>+8</td>
+                <td><code>setBuilder()</code> runtime swap (큐 안전 보존)</td></tr>
+            <tr><td>App</td><td><code>ClaudeSync/App/AppEnvironment.swift</code></td><td>+52</td>
+                <td>preferences/launchAtLogin 소유, <code>applyPreferences()</code></td></tr>
+            <tr><td>App</td><td><code>ClaudeSync/App/ClaudeSyncApp.swift</code></td><td>+5</td>
+                <td>Settings scene 추가</td></tr>
+            <tr><td>UI</td><td><code>ClaudeSync/UI/SettingsView.swift</code></td><td>신규 175</td>
+                <td>TabView 3탭 (General / Network / Excludes)</td></tr>
+            <tr><td>UI</td><td><code>ClaudeSync/UI/MenuBarRootView.swift</code></td><td>+12</td>
+                <td>Settings 버튼 + ⌘,(comma) 단축키</td></tr>
+            <tr><td>Assets</td><td><code>Resources/Assets.xcassets/AppIcon.appiconset/*</code></td><td>10 PNG</td>
+                <td>16/32/128/256/512 + @2x, gradient + sync glyph</td></tr>
+            <tr><td>Test</td><td><code>RsyncCommandBuilderTests.swift</code></td><td>+60 (10→14)</td>
+                <td>bwlimit + userExtras 4 cases</td></tr>
+            <tr><td>Test</td><td><code>PreferencesTests.swift</code></td><td>신규 100</td>
+                <td>모델 + store 라운드트립 + corruption fallback (10)</td></tr>
+            <tr><td>Test</td><td><code>LaunchAtLoginTests.swift</code></td><td>신규 30</td>
+                <td>status enum 안전성 (2) — 실 SMAppService 호출 회피</td></tr>
+            <tr><td>Script</td><td><code>scripts/generate-appicon.swift</code></td><td>신규 110</td>
+                <td>Core Graphics gradient + 양방향 화살표 글리프</td></tr>
+            <tr><td>Script</td><td><code>scripts/release-build.sh</code></td><td>신규 50</td>
+                <td>Universal Release + lipo verification</td></tr>
+            <tr><td>Script</td><td><code>scripts/measure-footprint.sh</code></td><td>신규 90</td>
+                <td><strong>heap 기반 Physical Footprint</strong> + ps RSS 비교 기록</td></tr>
+            <tr><td>Script</td><td><code>scripts/package.sh</code></td><td>신규 95</td>
+                <td>release-build → codesign(opt) → DMG → notarize(opt)</td></tr>
+            <tr><td>Docs</td><td><code>HANDOFF.md</code></td><td>rewrite</td>
+                <td>v1.0-rc1 상태 반영</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="tests">
+      <h2>3. 테스트 결과 (177/177 PASS)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>스위트</th><th>테스트 수</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr><td>기존 22 스위트 (Phase 1~6 + v0.2/v0.3)</td><td>162</td><td>PASS — 회귀 없음</td></tr>
+            <tr><td><strong>PreferencesTests</strong> (신규)</td><td><strong>10</strong></td>
+                <td>PASS — model · store roundtrip · corruption fallback · sync loader</td></tr>
+            <tr><td><strong>LaunchAtLoginTests</strong> (신규)</td><td><strong>2</strong></td>
+                <td>PASS — status enum 안전성 (실 register 회피)</td></tr>
+            <tr><td>RsyncCommandBuilderTests</td><td>+4 (10 → 14)</td>
+                <td>PASS — <code>--bwlimit</code> · per-target user extras 격리</td></tr>
+            <tr><td><strong>합계</strong></td><td><strong>177</strong></td><td><strong>PASS, 11.0초</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="chart-container">
+        <canvas id="testGrowth" height="120"></canvas>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section id="decision">
+      <h2>4. 핵심 결정 — "ps RSS 91MB 트랩"과 10인 전문가 패널</h2>
+      <p>측정 도구의 정확도가 PRD 목표 검증의 신뢰성을 결정한 사건입니다.</p>
+
+      <h3>4.1 측정 시퀀스</h3>
+      <ol>
+        <li><strong>최초 측정</strong>: <code>ps -o rss</code> = <code>91.6 MB</code> → "PRD G4 50MB 초과!"</li>
+        <li><strong>10인 전문가 패널 스폰</strong>: Christensen, Porter, Drucker, Godin, Kim/Mauborgne, Collins, <span style="color:var(--warning)">Taleb (비판적)</span>, Meadows, Doumont, macOS Sys Engineer</li>
+        <li><strong>다수결</strong>: A=0(차단) · B=5(PRD 갱신) · C=4(검증 후 결정) · C+B=1 → <strong>C → B 하이브리드</strong></li>
+        <li><strong>30분 timebox 검증</strong>: <code>heap PID</code> 명령 실행</li>
+        <li><strong>실 결과</strong>: <code>Physical footprint = 22.8 MB</code>, peak 22.9 MB, <strong>0 leaks</strong></li>
+      </ol>
+
+      <h3>4.2 진단</h3>
+      <p>
+        <code>ps -o rss</code>는 macOS에서 SwiftUI · AppKit · Network.framework · CoreServices 등 모든 공유 라이브러리 페이지를 합산해 보고합니다.
+        Apple이 <strong>메모리 압력 지표</strong>로 사용하는 것은 Activity Monitor "Memory" 컬럼과 동일한 <strong>Physical footprint</strong>이며,
+        이 값이 PRD G4의 의도와 일치합니다.
+      </p>
+
+      <div class="chart-container">
+        <canvas id="memChart" height="160"></canvas>
+      </div>
+
+      <div class="callout warning">
+        <div class="callout-title">⚠️ Taleb 우려 해소</div>
+        Taleb는 "PRD를 측정값에 굴복시키는 것은 Goodhart's law의 역방향이며 fragility를 코드에 잠그는 행위"라고 비판했습니다.
+        측정 도구의 정확도부터 검증한 결과, PRD를 갱신할 필요 없이 <strong>실측 22.7MB &lt;&lt; 50MB 목표</strong>로 충족됨이 확인되었습니다.
+        <em>측정값이 의심될 때는 측정 도구부터 의심하라</em>는 원칙이 시스템에 학습되었습니다.
+      </div>
+
+      <div class="callout success">
+        <div class="callout-title">✅ 결정 산출물</div>
+        <code>scripts/measure-footprint.sh</code>는 <strong>heap 기반 Physical Footprint</strong>를 1차 지표로,
+        ps RSS는 비교용 보조 지표로 같이 기록하도록 갱신되었습니다.
+        soft fail 임계는 50MB, hard fail은 75MB.
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="remaining">
+      <h2>5. v1.0 잔여 작업 (사용자 위임)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>작업</th><th>차단 사유</th><th>실행 명령</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Developer ID Application 서명</td>
+              <td>사용자 키체인의 인증서 필요</td>
+              <td><code>export CODESIGN_IDENTITY="Developer ID Application: …" &amp;&amp; bash scripts/package.sh</code></td>
+            </tr>
+            <tr>
+              <td>xcrun notarytool 공증</td>
+              <td>사용자 Apple ID + app-specific password</td>
+              <td><code>xcrun notarytool store-credentials … &amp;&amp; export NOTARY_PROFILE=ClaudeSync</code></td>
+            </tr>
+            <tr>
+              <td>두 Mac 실기 검증</td>
+              <td>사용자의 두 번째 Mac 필요</td>
+              <td><code>docs/DEMO_TWO_MACS.md</code> 따라 진행</td>
+            </tr>
+            <tr>
+              <td>GitHub Release 게시</td>
+              <td>gh auth + 위 서명/공증 완료 후</td>
+              <td><code>gh release create v1.0.0 dist/ClaudeSync-1.0.0.dmg</code></td>
+            </tr>
+            <tr>
+              <td>72시간 dogfood 안정성 테스트</td>
+              <td>사용자 환경에서 직접</td>
+              <td>출시 전후 모니터링</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>5.1 다음 세션 첫 명령 예시</h3>
+<pre class="code-block" data-language="bash"><span class="code-lang">bash</span><code><span class="comment"># 1. 자격증명 셋업 (한 번만)</span>
+<span class="keyword">export</span> CODESIGN_IDENTITY=<span class="string">"Developer ID Application: Your Name (TEAMID)"</span>
+xcrun notarytool store-credentials ClaudeSync \
+    --apple-id <span class="string">you@example.com</span> --team-id <span class="string">TEAMID</span> \
+    --password <span class="string">XXXX-XXXX-XXXX-XXXX</span>
+<span class="keyword">export</span> NOTARY_PROFILE=ClaudeSync
+
+<span class="comment"># 2. 서명 + 공증된 DMG 생성</span>
+bash scripts/package.sh
+
+<span class="comment"># 3. GitHub Release</span>
+gh release create v1.0.0 dist/ClaudeSync-1.0.0.dmg \
+    --title <span class="string">"ClaudeSync v1.0.0"</span> --generate-notes
+</code></pre>
+    </section>
+
+    <!-- 6 -->
+    <section id="release">
+      <h2>6. Release 빌드 결과</h2>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Architectures</div>
+          <div class="metric-value" style="font-size:18px;">arm64 + x86_64</div>
+          <div class="metric-sub">lipo verified</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">App Bundle</div>
+          <div class="metric-value">4.2 MB</div>
+          <div class="metric-sub">ClaudeSync.app (Universal)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">DMG</div>
+          <div class="metric-value">1.4 MB</div>
+          <div class="metric-sub">UDZO zlib + ad-hoc 서명</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Memory leaks</div>
+          <div class="metric-value">0</div>
+          <div class="metric-sub">leaks(1) 보고 0 bytes</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Heap nodes</div>
+          <div class="metric-value">55,723</div>
+          <div class="metric-sub">8.7 MB malloc total</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">PRD G4 margin</div>
+          <div class="metric-value" style="color:var(--success);">44%</div>
+          <div class="metric-sub">(50 − 22.7) / 50 · 50MB 목표 대비</div>
+        </div>
+      </div>
+
+<pre class="code-block" data-language="bash"><span class="code-lang">build output</span><code>▶︎ Bundle: .build/release-DD/Build/Products/Release/ClaudeSync.app
+▶︎ Architectures:
+Architectures in the fat file: ClaudeSync are: <span class="number">x86_64 arm64</span>
+
+▶︎ Bundle size:
+<span class="number">4.2M</span>	ClaudeSync.app
+
+▶︎ Mach-O slices:
+ClaudeSync: Mach-O universal binary with 2 architectures: [x86_64] [arm64]
+
+✅ Release build complete.
+</code></pre>
+
+<pre class="code-block" data-language="bash"><span class="code-lang">footprint sample</span><code>▶︎ Samples: 5 | log: .build/footprint/20260505-182309.csv
+▶︎ Peak Physical Footprint:  <span class="number">22.7</span> MB
+▶︎ Avg  Physical Footprint:  <span class="number">22.6</span> MB
+▶︎ Last ps RSS (incl. shared libs): <span class="number">91.5</span> MB
+
+✅ Peak Footprint within PRD G4 50 MB target.
+</code></pre>
+    </section>
+
+    <!-- 7 -->
+    <section id="caveats">
+      <h2>7. 알려진 제약 / 후속과제</h2>
+      <ul>
+        <li><strong>AppIcon은 placeholder</strong> — Core Graphics gradient + sync glyph로 자동 생성. v1.1에서 디자이너 작업물로 교체 권장.</li>
+        <li><strong>LaunchAtLoginTests는 실 SMAppService.register 회피</strong> — LaunchServices에 시스템 부작용. 실 등록/해제 검증은 사용자 수동.</li>
+        <li><strong>Settings Excludes 탭 동작</strong> — 변경 즉시 builder를 swap하지만, <em>이미 큐에 들어간 SyncJob</em>은 이전 builder로 실행됨 (의도적 — 진행 중인 sync 보호). 다음 큐부터 새 패턴 적용.</li>
+        <li><strong>DMG는 ad-hoc 서명만</strong> — Gatekeeper가 다운로드-앤-오픈 차단. Developer ID 서명+공증 후 배포 가능.</li>
+        <li><strong>Persistent agent (b5zrojfgw 등) 정리</strong> — 이전 세션의 stale background bash 작업이 남아 있을 수 있음. 신규 세션 시작 시 <code>jobs</code>로 점검 권장.</li>
+      </ul>
+    </section>
+
+    <!-- 8 -->
+    <section id="commits">
+      <h2>8. 커밋 계획 (다음 단계)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>그룹</th><th>파일</th><th>메시지 안</th></tr></thead>
+          <tbody>
+            <tr><td>C1</td>
+                <td><code>project.yml</code> + <code>scripts/release-build.sh</code> + <code>scripts/package.sh</code> + <code>.gitignore</code></td>
+                <td><code>chore(release): Universal binary + DMG packaging pipeline</code></td></tr>
+            <tr><td>C2</td>
+                <td><code>LaunchAtLogin.swift</code> + <code>Preferences.swift</code> + <code>AppEnvironment</code> wiring + <code>RsyncCommandBuilder</code> + <code>FileSyncActor</code> + 테스트 3종</td>
+                <td><code>feat(v1.0): Settings + Launch at Login + bandwidth/exclude preferences</code></td></tr>
+            <tr><td>C3</td>
+                <td><code>UI/SettingsView.swift</code> + <code>UI/MenuBarRootView.swift</code> + <code>ClaudeSyncApp.swift</code></td>
+                <td><code>feat(ui): Settings window with 3 tabs and menu bar shortcut</code></td></tr>
+            <tr><td>C4</td>
+                <td><code>scripts/generate-appicon.swift</code> + <code>Resources/Assets.xcassets/AppIcon.appiconset/*</code></td>
+                <td><code>chore(assets): generate placeholder AppIcon set (16-512 + @2x)</code></td></tr>
+            <tr><td>C5</td>
+                <td><code>scripts/measure-footprint.sh</code></td>
+                <td><code>chore(release): footprint-based memory measurement script</code></td></tr>
+            <tr><td>C6</td>
+                <td><code>HANDOFF.md</code> + <code>docs/reports/2026-05-05-v1.0-rc1-hardening.html</code></td>
+                <td><code>docs(handoff): v1.0-rc1 milestone reached</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>위 6개 커밋은 단일 push로 origin/main에 반영됩니다.</p>
+    </section>
+
+    <!-- 9 -->
+    <section id="wrap">
+      <h2>9. 마무리</h2>
+      <ul>
+        <li>✅ <strong>177 / 177</strong> 테스트 그린, 회귀 없음</li>
+        <li>✅ <strong>Universal binary</strong> arm64 + x86_64 검증 완료</li>
+        <li>✅ <strong>Idle Physical Footprint 22.7 MB</strong> &lt;&lt; PRD G4 50 MB 목표 (44% margin)</li>
+        <li>✅ <strong>패키징 파이프라인 3단계</strong>: build → footprint → dmg 모두 동작</li>
+        <li>✅ <strong>Settings + Launch at Login + AppIcon</strong> 사용자 노출 가능 상태</li>
+        <li>⏳ Developer ID 서명 + notarization + 두 Mac 실기 검증만 남음 (모두 사용자 자격증명 필요)</li>
+      </ul>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 다음 세션 Resume Prompt</div>
+<pre class="code-block" style="background:transparent; border:none; padding:8px 0;"><code>이전 세션에서 ClaudeSync v1.0-rc1까지 완료했습니다 (Universal binary,
+Settings, Launch at Login, AppIcon, DMG 패키징). HANDOFF.md를 읽고 현재
+상태를 파악한 후, 서명+공증 또는 두 Mac 실기 검증, GitHub Release 중
+사용자가 원하는 작업을 진행하세요.
+
+테스트는 177/177 그린, main이 origin/main과 동기화 상태,
+dist/ClaudeSync-1.0.0.dmg가 ad-hoc 서명 상태로 존재합니다.</code></pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="scroll-top" id="scrollTop" aria-label="Back to top">↑</button>
+
+<script>
+  // TOC active state via IntersectionObserver.
+  const links = document.querySelectorAll('.toc a');
+  const sections = document.querySelectorAll('main section');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.toc a[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // Smooth scroll.
+  links.forEach(l => l.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const id = l.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+
+  // Back to top.
+  const btn = document.getElementById('scrollTop');
+  window.addEventListener('scroll', () => {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+  // Charts.
+  const memCtx = document.getElementById('memChart').getContext('2d');
+  new Chart(memCtx, {
+    type: 'bar',
+    data: {
+      labels: ['ps RSS (shared libs incl.)', 'Physical Footprint (heap)', 'PRD G4 target'],
+      datasets: [{
+        label: 'Memory (MB)',
+        data: [91.6, 22.7, 50.0],
+        backgroundColor: ['#f85149', '#3fb950', '#58a6ff']
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: '메모리 측정 — 도구별 보고값', color: '#e6edf3' },
+        legend: { display: false }
+      },
+      scales: {
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'MB', color: '#8b949e' } },
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+
+  const growthCtx = document.getElementById('testGrowth').getContext('2d');
+  new Chart(growthCtx, {
+    type: 'line',
+    data: {
+      labels: ['Phase 1', 'Phase 2+3', 'Phase 4', 'Phase 5', 'Phase 6', 'v0.2', 'v0.3', 'v1.0-rc1'],
+      datasets: [{
+        label: 'Test count',
+        data: [4, 89, 121, 145, 158, 158, 162, 177],
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,0.15)',
+        tension: 0.25,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: '테스트 누적 추이', color: '#e6edf3' },
+        legend: { labels: { color: '#e6edf3' } }
+      },
+      scales: {
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, beginAtZero: true },
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+</script>
+</body>
+</html>
