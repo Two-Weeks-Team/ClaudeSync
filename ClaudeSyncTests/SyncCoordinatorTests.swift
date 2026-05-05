@@ -16,8 +16,9 @@ final class SyncCoordinatorTests: XCTestCase {
             config: .init(maxConcurrent: 1, builder: builder),
             peer: .init(sshAddress: "kim@unused.local")
         )
-        let (_, batch) = BatchAccumulator.makeStream(flushInterval: .seconds(60))
-        let coord = SyncCoordinator(watcher: watcher, syncActor: sync, batchAccumulator: batch)
+        let (batchStream, batch) = BatchAccumulator.makeStream(flushInterval: .seconds(60))
+        let coord = SyncCoordinator(watcher: watcher, syncActor: sync,
+                                    batchAccumulator: batch, batchStream: batchStream)
 
         XCTAssertEqual(coord.state, .idle)
         await coord.start(targets: [])  // empty target set: no streams to install
@@ -39,8 +40,9 @@ final class SyncCoordinatorTests: XCTestCase {
             config: .init(maxConcurrent: 2, builder: builder),
             peer: .init(sshAddress: "kim@unused.local")
         )
-        let (_, batch) = BatchAccumulator.makeStream(flushInterval: .seconds(60))
-        let coord = SyncCoordinator(watcher: watcher, syncActor: sync, batchAccumulator: batch)
+        let (batchStream, batch) = BatchAccumulator.makeStream(flushInterval: .seconds(60))
+        let coord = SyncCoordinator(watcher: watcher, syncActor: sync,
+                                    batchAccumulator: batch, batchStream: batchStream)
         await coord.start(targets: [])
 
         // Manually enqueue some jobs and let the result pump tick.
@@ -64,8 +66,9 @@ final class SyncCoordinatorTests: XCTestCase {
             config: .init(maxConcurrent: 0, builder: builder),  // never run
             peer: .init(sshAddress: "kim@unused.local")
         )
-        let (_, batch) = BatchAccumulator.makeStream()
-        let coord = SyncCoordinator(watcher: watcher, syncActor: sync, batchAccumulator: batch)
+        let (batchStream, batch) = BatchAccumulator.makeStream()
+        let coord = SyncCoordinator(watcher: watcher, syncActor: sync,
+                                    batchAccumulator: batch, batchStream: batchStream)
 
         await coord.triggerFullSync(.projects)
 

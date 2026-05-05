@@ -12,6 +12,8 @@ struct MenuBarRootView: View {
             Divider()
             statusRow
             Divider()
+            peersSection
+            Divider()
             targetsSection
             if !environment.coordinator.recentResults.isEmpty {
                 Divider()
@@ -60,6 +62,32 @@ struct MenuBarRootView: View {
         case .watching:              return "Watching for changes"
         case .syncing(let active):   return "Syncing \(active) job(s)…"
         case .error(let message):    return "Error: \(message)"
+        }
+    }
+
+    private var peersSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Peers on this network")
+                .font(.caption).foregroundStyle(.secondary)
+            if environment.discoveredPeers.isEmpty {
+                Text("No peers discovered yet")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else {
+                ForEach(environment.discoveredPeers) { peer in
+                    HStack(spacing: 6) {
+                        Image(systemName: peer.isPaired ? "checkmark.shield.fill" : "antenna.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(peer.isPaired ? .green : .blue)
+                        Text("\(peer.hostname) (\(peer.username))")
+                            .font(.caption)
+                        Spacer()
+                        if !peer.isPaired {
+                            Text("Pair from Onboarding")
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
         }
     }
 

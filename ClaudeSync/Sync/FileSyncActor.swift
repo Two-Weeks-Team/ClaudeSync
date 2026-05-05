@@ -19,7 +19,13 @@ public actor FileSyncActor {
 
     public let config: Configuration
     public let watcher: FileWatcherActor?
-    public let peer: RsyncCommandBuilder.PeerEndpoint?
+    public private(set) var peer: RsyncCommandBuilder.PeerEndpoint?
+
+    /// Update the peer endpoint after pairing completes. nil-out to revert to
+    /// "no peer" state (jobs will fail with "no peer configured").
+    public func setPeer(_ newPeer: RsyncCommandBuilder.PeerEndpoint?) {
+        self.peer = newPeer
+    }
 
     private var queue = SyncJobPriorityQueue()
     private var runningIDs: Set<UUID> = []

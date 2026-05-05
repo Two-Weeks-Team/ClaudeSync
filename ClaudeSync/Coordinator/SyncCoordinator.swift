@@ -27,6 +27,7 @@ public final class SyncCoordinator {
     public let watcher: FileWatcherActor
     public let syncActor: FileSyncActor
     public let batchAccumulator: BatchAccumulator
+    public let batchStream: AsyncStream<BatchAccumulator.Output>
     public let conflictResolver: ConflictResolver
 
     private var watcherTask: Task<Void, Never>?
@@ -37,11 +38,13 @@ public final class SyncCoordinator {
         watcher: FileWatcherActor,
         syncActor: FileSyncActor,
         batchAccumulator: BatchAccumulator,
+        batchStream: AsyncStream<BatchAccumulator.Output>,
         conflictResolver: ConflictResolver = ConflictResolver()
     ) {
         self.watcher = watcher
         self.syncActor = syncActor
         self.batchAccumulator = batchAccumulator
+        self.batchStream = batchStream
         self.conflictResolver = conflictResolver
     }
 
@@ -63,11 +66,20 @@ public final class SyncCoordinator {
         }
 
         // Pump 2: accumulator flushes → enqueue as low-priority push.
-        let batchStream = await batchAccumulator
-        // Note: BatchAccumulator.makeStream returns the stream alongside the
-        // accumulator so the caller wires both. We re-derive the stream by
-        // requesting it here only because we kept a reference at init time.
-        _ = batchStream  // (placeholder — see Note below)
+        let batchPath = batchStream
+        batchTask = Task { [weak self] in
+            for await batch in batchPath {
+                guard let self else { break }
+                let job = SyncJob(
+                    target: batch.target,
+                    paths: batch.paths,
+                    direction: .push,
+                    priority: .low,
+                    tier: .batched
+                )
+                await self.syncActor.enqueue(job)
+            }
+        }
 
         // Pump 3: sync results → update UI state.
         let results = await syncActor.results()
