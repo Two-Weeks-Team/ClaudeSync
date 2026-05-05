@@ -78,6 +78,12 @@ public actor SSHKeyManager {
     public var rsyncWrapperURL: URL {
         homeDirectoryURL.appendingPathComponent(".claudesync/bin/rsync-server-wrapper")
     }
+    /// v1.1 (SEC-005): ClaudeSync-private known_hosts so SSH no longer
+    /// silently TOFU-trusts whatever host key is presented on first
+    /// connection. Populated at pairing time from the peer's PairAccept.
+    public var knownHostsURL: URL {
+        homeDirectoryURL.appendingPathComponent(".claudesync/ssh/known_hosts")
+    }
 
     // MARK: - Generation
 
@@ -307,6 +313,64 @@ public actor SSHKeyManager {
                 attributes: [.posixPermissions: 0o600]
             )
         }
+    }
+
+    /// v1.1 (SEC-005): write `<hostname> <hostkey>` into our private
+    /// known_hosts file. Existing entries for the same hostname are
+    /// replaced so a re-pair updates the trusted key. Hostname must
+    /// pass `AppEnvironment.isSafeNetworkIdentifier` upstream — we do
+    /// not re-validate here, but we DO refuse a hostkey line that's
+    /// missing the algorithm prefix.
+    public func registerKnownHost(hostname: String, hostKey: String) throws {
+        let trimmed = hostKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("ssh-") || trimmed.hasPrefix("ecdsa-") else {
+            throw KeyError.fingerprintParseFailed("hostkey lacks algorithm prefix")
+        }
+        let fm = FileManager.default
+        try fm.createDirectory(at: knownHostsURL.deletingLastPathComponent(),
+                               withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o700])
+        var existing: String = ""
+        if fm.fileExists(atPath: knownHostsURL.path) {
+            existing = (try? String(contentsOf: knownHostsURL, encoding: .utf8)) ?? ""
+        }
+        // Drop any prior line for this hostname (or `<host>,<host>.local`).
+        let bareHost = hostname.hasSuffix(".local")
+            ? String(hostname.dropLast(".local".count))
+            : hostname
+        let kept = existing
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                let s = String(line)
+                if s.isEmpty { return false }
+                let firstField = s.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
+                let names = firstField.split(separator: ",").map(String.init)
+                return !(names.contains(bareHost) || names.contains("\(bareHost).local"))
+            }
+            .joined(separator: "\n")
+        let entry = "\(bareHost),\(bareHost).local \(trimmed)\n"
+        let next = kept.isEmpty ? entry : (kept.hasSuffix("\n") ? kept + entry : kept + "\n" + entry)
+        try next.write(to: knownHostsURL, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o600],
+                              ofItemAtPath: knownHostsURL.path)
+    }
+
+    /// Returns true if `hostname` (or `hostname.local`) has at least one
+    /// entry in our private known_hosts.
+    public func hasKnownHost(hostname: String) -> Bool {
+        guard let contents = try? String(contentsOf: knownHostsURL, encoding: .utf8)
+        else { return false }
+        let bare = hostname.hasSuffix(".local")
+            ? String(hostname.dropLast(".local".count))
+            : hostname
+        for line in contents.split(separator: "\n") {
+            let firstField = line.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
+            let names = firstField.split(separator: ",").map(String.init)
+            if names.contains(bare) || names.contains("\(bare).local") {
+                return true
+            }
+        }
+        return false
     }
 
     /// v1.0.1 (SEC-001): install the rsync-server wrapper script that

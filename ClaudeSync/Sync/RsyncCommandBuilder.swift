@@ -25,12 +25,18 @@ public struct RsyncCommandBuilder: Sendable {
     /// User-supplied additional excludes per target, merged with the spec
     /// defaults and `IgnorePatterns.security`.
     public let userExtraExcludes: [SyncTarget: [String]]
+    /// v1.1 (SEC-005): when set, ssh is told to use this private
+    /// known_hosts file with `StrictHostKeyChecking=yes` instead of the
+    /// `accept-new` TOFU behavior. Empty string disables strict mode and
+    /// falls back to the v1.0.x `accept-new` semantics.
+    public let knownHostsPath: String
 
     public init(
         rsyncPath: String? = nil,
         sshKeyPath: String? = nil,
         bandwidthLimitKBps: Int = 0,
-        userExtraExcludes: [SyncTarget: [String]] = [:]
+        userExtraExcludes: [SyncTarget: [String]] = [:],
+        knownHostsPath: String = ""
     ) {
         let detected = rsyncPath ?? Self.detectRsyncBinary()
         self.rsyncPath = detected
@@ -38,6 +44,7 @@ public struct RsyncCommandBuilder: Sendable {
         self.sshKeyPath = sshKeyPath ?? Self.defaultSSHKeyPath()
         self.bandwidthLimitKBps = max(0, bandwidthLimitKBps)
         self.userExtraExcludes = userExtraExcludes
+        self.knownHostsPath = knownHostsPath
     }
 
     /// Default `~/.claudesync/ssh/id_claudesync` path. Pulled into a static so
@@ -135,16 +142,28 @@ public struct RsyncCommandBuilder: Sendable {
     // MARK: - Helpers
 
     func sshCommand(for peer: PeerEndpoint) -> String {
+        // v1.1 (SEC-005): if we have a populated known_hosts (post-pairing),
+        // require strict checking against it. Otherwise fall back to
+        // accept-new for the very first pairing handshake.
+        let hostKeyChecking: String
+        var extra: [String] = []
+        if !knownHostsPath.isEmpty {
+            hostKeyChecking = "StrictHostKeyChecking=yes"
+            extra += ["-o", "UserKnownHostsFile=\(knownHostsPath)"]
+            extra += ["-o", "GlobalKnownHostsFile=/dev/null"]
+        } else {
+            hostKeyChecking = "StrictHostKeyChecking=accept-new"
+        }
         let parts: [String] = [
             "ssh",
             "-i", sshKeyPath,
             "-o", "BatchMode=yes",
-            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", hostKeyChecking,
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3",
             "-p", String(peer.sshPort),
-        ]
+        ] + extra
         return parts.joined(separator: " ")
     }
 
