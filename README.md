@@ -10,7 +10,10 @@
 
 ## 목차
 
-- [30초 설치 (한 줄)](#30초-설치-한-줄)
+- [설치 — 세 가지 path 중 하나](#설치--세-가지-path-중-하나)
+  - [Path A — Claude Code에게 위임 ⭐](#path-a--claude-code또는-다른-ai-agent에게-위임--가장-게으른-방법)
+  - [Path B — 한 줄 web installer](#path-b--한-줄-web-installer-claude-code-없어도-ok)
+  - [Path C — 직접 수동](#path-c--git-clone-후-직접-수동-개발자용)
 - [전체 흐름 — 두 Mac 처음부터 끝까지](#전체-흐름--두-mac-처음부터-끝까지)
 - [무엇을 하나](#무엇을-하나)
 - [🧑 For Human — 사용자 가이드](#-for-human--사용자-가이드)
@@ -18,7 +21,28 @@
 
 ---
 
-## 30초 설치 (한 줄)
+## 설치 — 세 가지 path 중 하나
+
+### Path A — Claude Code(또는 다른 AI agent)에게 위임 ⭐ 가장 게으른 방법
+
+다른 Mac에서 git clone만 한 후 그 폴더에서 Claude Code를 열고 한 마디:
+
+```
+이 프로젝트 설치해서 실행해줘
+```
+
+Claude Code가 자동으로 `CLAUDE.md`의 "Install workflow" 섹션을 읽고 다음을 처리합니다:
+
+1. `bash scripts/install.sh` 실행 (Xcode CLT / Homebrew / xcodegen 자동)
+2. Universal Release 빌드 + `/Applications/ClaudeSync.app` 설치 + launch
+3. macOS가 묻는 GUI prompt들 (Remote Login, FDA, Local Network)을 사용자에게 명시적으로 안내
+4. Onboarding 6단계 마법사로 가이드
+
+LLM이 못 하는 부분 (시스템 다이얼로그 클릭, Onboarding 버튼 클릭)은 사용자에게 정확히 어디를 클릭하라고 안내합니다.
+
+> 💡 사전 요구: 다른 Mac에 Claude Code가 설치되어 있어야 함 + git clone이 끝나 있어야 함. Claude Code가 없으면 Path B 또는 C를 사용.
+
+### Path B — 한 줄 web installer (Claude Code 없어도 OK)
 
 **두 Mac 각각의 터미널에서 똑같이 한 번씩**:
 
@@ -42,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/Two-Weeks-Team/ClaudeSync/main/scri
 
 > ⚠️ **Xcode 자체는 자동 설치 불가** — Apple 정책상 CLI로 설치 못 함. Mac App Store에서 "Xcode" 검색 후 한 번만 설치 (대용량, 30분~1시간 소요). 설치 후 위 명령 실행.
 
-### 또는 git clone 후 수동 단계
+### Path C — git clone 후 직접 수동 (개발자용)
 
 ```bash
 git clone https://github.com/Two-Weeks-Team/ClaudeSync.git
@@ -51,6 +75,14 @@ bash scripts/install.sh
 ```
 
 `install.sh`는 기본 non-interactive (자동 yes). prompt 모드 원하면 `CLAUDESYNC_INTERACTIVE=1`.
+
+### 세 가지 path 비교
+
+| Path | 사용자 입력 | LLM 필요? | 사용자가 봐야 할 것 |
+|------|-----------|---------|------------------|
+| A (AI 위임) | "이 프로젝트 설치해서 실행해줘" 한 마디 | ✅ Claude Code | LLM이 안내하는 시스템 prompt들 |
+| B (curl 한 줄) | curl ... 한 줄 | ❌ | install.sh 출력의 "다음 단계" 섹션 |
+| C (수동) | git clone + cd + bash | ❌ | install.sh 출력 + README의 페어링 흐름 |
 
 ---
 
