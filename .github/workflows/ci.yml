@@ -70,11 +70,17 @@ jobs:
             build \
           | tail -50
 
-      - name: Run tests (214 expected)
+      - name: Run tests (211 expected on CI; 214 locally)
         env:
           # SingleInstanceGuard already auto-skips when XCTestConfigurationFilePath
           # is set, but belt-and-braces.
           CLAUDESYNC_DISABLE_SINGLE_INSTANCE: "1"
+          # The XCTSkipIf inside FileWatcherActorTests reads these, but the
+          # xctest runner doesn't always inherit env vars from the workflow
+          # so we ALSO use -skip-testing as the authoritative gate.
+          CI: "true"
+          GITHUB_ACTIONS: "true"
+          CLAUDESYNC_SKIP_FSEVENTS: "1"
         run: |
           set -o pipefail
           xcodebuild \
@@ -82,6 +88,9 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS' \
             -derivedDataPath .build/ci-DD \
+            -skip-testing ClaudeSyncTests/FileWatcherActorTests/testFileCreate_inWatchedTarget_emitsBatch \
+            -skip-testing ClaudeSyncTests/FileWatcherActorTests/testIgnoredFile_isFilteredOut \
+            -skip-testing ClaudeSyncTests/FileWatcherActorTests/testEchoSuppression_dropsEventsForActiveRsyncPID \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
