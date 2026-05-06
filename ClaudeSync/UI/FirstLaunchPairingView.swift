@@ -89,9 +89,10 @@ public struct FirstLaunchPairingView: View {
                     statusRow(systemImage: "checkmark.circle.fill", color: .green,
                               text: "Remote Login is enabled.")
                 } else {
-                    let detail = String(describing: outcome.failingSide ?? .local(.connectionRefused(port: 22)))
+                    let message = outcome.failingSide?.userFacingMessage
+                        ?? "Remote Login appears disabled."
                     statusRow(systemImage: "xmark.octagon.fill", color: .red,
-                              text: "Remote Login appears disabled (\(detail)).")
+                              text: message)
                     Button("Open System Settings") { model.openSystemSettingsForRemoteLogin() }
                         .buttonStyle(.bordered)
                 }
@@ -108,12 +109,17 @@ public struct FirstLaunchPairingView: View {
                 }
                 .buttonStyle(.bordered)
 
+                let canAdvance: Bool = {
+                    if case .remoteLogin(let o?) = model.step { return o.isReady }
+                    return false
+                }()
                 Button("Continue") { model.advanceFromRemoteLogin() }
                     .buttonStyle(.borderedProminent)
-                    .disabled({
-                        if case .remoteLogin(let o?) = model.step { return !o.isReady }
-                        return true
-                    }())
+                    .disabled(!canAdvance)
+                    .opacity(canAdvance ? 1.0 : 0.5)
+                    .help(canAdvance
+                          ? "Proceed to Full Disk Access"
+                          : "Enable Remote Login first, then click Check now")
             }
         }
     }

@@ -30,6 +30,49 @@ public struct RemoteLoginPreflight: Sendable {
     public enum FailingSide: Equatable, Sendable {
         case local(SSHReachability)
         case peer(SSHReachability)
+
+        /// Human-readable explanation suitable for the Onboarding UI.
+        /// v1.1.1: hides the Swift enum debug-form (e.g.
+        /// `local(ClaudeSync.SSHReachability.connectionRefused(port: 22))`)
+        /// that v1.1.0 was leaking to users.
+        public var userFacingMessage: String {
+            switch self {
+            case .local(let r):
+                return Self.localMessage(for: r)
+            case .peer(let r):
+                return Self.peerMessage(for: r)
+            }
+        }
+
+        private static func localMessage(for r: SSHReachability) -> String {
+            switch r {
+            case .ok, .authFailed:
+                return "This Mac's Remote Login is on."
+            case .connectionRefused:
+                return "This Mac's Remote Login is OFF. Open System Settings → General → Sharing and turn on \"Remote Login\"."
+            case .connectionTimeout:
+                return "This Mac's SSH server didn't respond in time. Try again, or check that no firewall is blocking port 22."
+            case .hostUnreachable:
+                return "This Mac couldn't reach localhost on port 22. Restart and try again."
+            case .unknownError(let msg):
+                return "SSH check failed: \(msg)"
+            }
+        }
+
+        private static func peerMessage(for r: SSHReachability) -> String {
+            switch r {
+            case .ok, .authFailed:
+                return "The other Mac's Remote Login is on."
+            case .connectionRefused:
+                return "The other Mac's Remote Login is OFF. Turn it on in System Settings → General → Sharing on that Mac."
+            case .connectionTimeout:
+                return "The other Mac didn't answer in time. Make sure both Macs are on the same Wi-Fi and that the other Mac is awake."
+            case .hostUnreachable(let host):
+                return "Couldn't find \"\(host)\" on the network. Both Macs must be on the same Wi-Fi."
+            case .unknownError(let msg):
+                return "Peer SSH check failed: \(msg)"
+            }
+        }
     }
 
     public let checker: SSHConnectivityChecker

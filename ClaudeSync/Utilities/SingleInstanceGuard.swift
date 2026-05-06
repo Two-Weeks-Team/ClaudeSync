@@ -31,11 +31,19 @@ public enum SingleInstanceGuard {
     /// Inspect the running-applications list AND a PID sentinel file.
     /// Returns `.primary` if we're the only one, or
     /// `.duplicateAlreadyRunning` if another instance is alive.
-    public static func check(homeDirectory: URL = URL(fileURLWithPath: NSHomeDirectory())) -> Outcome {
+    ///
+    /// `includeRunningAppsScan: false` skips the NSRunningApplication
+    /// scan and checks only the sentinel file. Used by unit tests where
+    /// any other ClaudeSync.app the developer happens to be running on
+    /// the same Mac would otherwise trip the assertion.
+    public static func check(
+        homeDirectory: URL = URL(fileURLWithPath: NSHomeDirectory()),
+        includeRunningAppsScan: Bool = true
+    ) -> Outcome {
         // 1) Process-list scan (only available with AppKit, which is fine
         //    since this is a macOS-only app).
         #if canImport(AppKit)
-        if let bundleId = Bundle.main.bundleIdentifier {
+        if includeRunningAppsScan, let bundleId = Bundle.main.bundleIdentifier {
             let me = ProcessInfo.processInfo.processIdentifier
             let others = NSRunningApplication
                 .runningApplications(withBundleIdentifier: bundleId)
@@ -93,6 +101,17 @@ public enum SingleInstanceGuard {
     /// is found, activate it and terminate self. Otherwise claim the
     /// sentinel and return.
     public static func enforce() {
+        // Skip during XCTest runs — xcodebuild test launches the host
+        // app via `lsopen`, and if any production ClaudeSync is also
+        // running on this Mac the guard would shut us down before any
+        // test can connect to the runner.
+        let env = ProcessInfo.processInfo.environment
+        if env["XCTestConfigurationFilePath"] != nil
+            || env["XCTestSessionIdentifier"] != nil
+            || env["CLAUDESYNC_DISABLE_SINGLE_INSTANCE"] == "1"
+        {
+            return
+        }
         switch check() {
         case .primary:
             claimSentinel()

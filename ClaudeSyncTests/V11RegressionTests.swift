@@ -334,14 +334,21 @@ final class V11RegressionTests: XCTestCase {
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
 
-        // No sentinel yet → primary.
-        let first = SingleInstanceGuard.check(homeDirectory: home)
+        // No sentinel yet → primary. We pass includeRunningAppsScan: false
+        // so the test isn't perturbed by any other ClaudeSync.app the
+        // developer happens to be running (NSRunningApplication is
+        // process-global and doesn't honor the temp home).
+        let first = SingleInstanceGuard.check(
+            homeDirectory: home, includeRunningAppsScan: false
+        )
         XCTAssertEqual(first, .primary)
 
         // Simulate a peer Mac that wrote a sentinel pointing at our own
         // PID. `check` should NOT trip (skip-self logic).
         SingleInstanceGuard.claimSentinel(homeDirectory: home)
-        let secondCheck = SingleInstanceGuard.check(homeDirectory: home)
+        let secondCheck = SingleInstanceGuard.check(
+            homeDirectory: home, includeRunningAppsScan: false
+        )
         XCTAssertEqual(secondCheck, .primary,
             "Sentinel pointing at our own PID must be treated as self")
 
@@ -349,7 +356,9 @@ final class V11RegressionTests: XCTestCase {
         // primary because kill(deadPid, 0) returns -1.
         let sentinel = home.appendingPathComponent(".claudesync/.app.pid")
         try? "999999999".write(to: sentinel, atomically: true, encoding: .utf8)
-        let thirdCheck = SingleInstanceGuard.check(homeDirectory: home)
+        let thirdCheck = SingleInstanceGuard.check(
+            homeDirectory: home, includeRunningAppsScan: false
+        )
         XCTAssertEqual(thirdCheck, .primary,
             "Stale sentinel for a dead PID must not block primary launch")
     }
