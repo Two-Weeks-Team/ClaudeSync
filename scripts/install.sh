@@ -218,28 +218,41 @@ fi
 
 cat <<'EOF'
 
-────────────────────────────────────────────────────────────────────
-✓ Install complete.
+════════════════════════════════════════════════════════════════════
+✓ 설치 완료 / Install complete
 
-Next on THIS Mac:
-  1) Click the antenna icon in your menu bar (top-right of the screen)
-  2) Click "Onboarding" to grant Remote Login + Full Disk Access permissions
-  3) Wait for the OTHER Mac to appear under "Peers on this network"
-  4) Click "Pair" → confirm the 6-digit code matches on both screens
+[1] 이 Mac에서 / On this Mac
+    화면 우측 상단 메뉴바의 안테나 아이콘 클릭 →
+    팝오버 하단 "Onboarding" 버튼 클릭 →
+    6단계 마법사:
+      ① Welcome → Continue
+      ② Remote Login 켜기 → Open System Settings → 토글 ON → Continue
+      ③ Full Disk Access → Open System Settings → "+"로 ClaudeSync 추가 → Continue
+      ④ Discovery → 다른 Mac이 목록에 뜨면 옆의 "Pair" 클릭
+      ⑤ 6자리 코드 표시 → 다른 Mac과 일치 확인
+      ⑥ "Confirm — codes match" → 완료
 
-Next on the OTHER Mac:
-  Repeat the same:
-      git clone https://github.com/Two-Weeks-Team/ClaudeSync.git
-      cd ClaudeSync && bash scripts/install.sh
+[2] 다른 Mac에서 / On the OTHER Mac
+    동일한 한 줄을 그대로 실행:
+      curl -fsSL https://raw.githubusercontent.com/Two-Weeks-Team/ClaudeSync/main/scripts/web-install.sh | bash
 
-Then on the OTHER Mac, you'll see the pair-request banner appear in the
-menu bar popover. Confirm the same 6-digit code → done. Sync starts
-immediately and survives both Macs restarting.
+    설치 완료되면 메뉴바에서 자동으로 "Pair request from MacA" 배너 뜸.
+    "Accept - codes match" 클릭 -> 양쪽 동기화 시작.
 
-Troubleshooting:
-  - "Searching for peer..." forever  → both Macs on same Wi-Fi? mDNS allowed?
-  - rsync exit 255                    → Remote Login enabled in System Settings?
-  - clock skew error                  → enable "Set time and date automatically"
-  - Full uninstall: pkill -x ClaudeSync && rm -rf /Applications/ClaudeSync.app ~/.claudesync
-────────────────────────────────────────────────────────────────────
+[3] macOS가 묻는 것 (모두 "허용") / macOS prompts (allow all)
+    - "ClaudeSync을 여시겠습니까?"        -> 열기 (첫 launch만)
+    - "로컬 네트워크의 디바이스를 찾고..."  -> 허용 (Bonjour 발견에 필수)
+    - System Settings -> 공유 -> 원격 로그인 -> ON
+    - System Settings -> 전체 디스크 접근 -> "+" -> /Applications/ClaudeSync.app
+
+[4] 트러블슈팅 / Troubleshooting
+    "Searching for peer..." 무한        -> 같은 Wi-Fi인지 확인 (회사 Wi-Fi는 mDNS 차단)
+    "Failed: rsync exit=255"            -> 양쪽 Mac에서 원격 로그인 ON 확인
+    "Failed: peer clock skew Ns"        -> 시스템 설정 -> 날짜 및 시간 -> "자동" 켜기
+    "another instance is already..."    -> killall ClaudeSync 후 재실행
+    완전 제거                            -> killall ClaudeSync && rm -rf /Applications/ClaudeSync.app ~/.claudesync
+
+자세한 안내 / Full guide:
+    https://github.com/Two-Weeks-Team/ClaudeSync#readme
+════════════════════════════════════════════════════════════════════
 EOF
