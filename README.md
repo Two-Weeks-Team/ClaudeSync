@@ -8,7 +8,27 @@
 
 ## 30초 설치
 
-**두 Mac 각각에서 똑같이 한 번씩**:
+**두 Mac 각각에서 한 줄만**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Two-Weeks-Team/ClaudeSync/main/scripts/web-install.sh | bash
+```
+
+이게 전부입니다. 이 한 줄이 자동으로:
+
+1. macOS Command Line Tools (없으면) → git → 소스 clone (`~/.claudesync/source`)
+2. Homebrew (없으면 비대화형 설치) → xcodegen
+3. Universal Release 빌드 (arm64 + x86_64, ~60초)
+4. `/Applications/ClaudeSync.app` 설치 + Gatekeeper quarantine 플래그 제거
+5. 앱 launch → 메뉴바 트레이 등장 + Bonjour 광고 확인
+
+다음에 메뉴바 안테나 아이콘 클릭 → "Onboarding" → 권한 부여 → Pair → 끝.
+
+> ⚠️ **단, Xcode 자체 (Mac App Store)는 자동 설치 불가** — Apple 정책상 CLI로 설치 못 함. Mac App Store에서 한 번만 설치 후 위 명령 실행.
+
+### 또는 git clone 후 수동 단계
+
+이미 git이 있고 코드를 보고 싶다면:
 
 ```bash
 git clone https://github.com/Two-Weeks-Team/ClaudeSync.git
@@ -16,16 +36,9 @@ cd ClaudeSync
 bash scripts/install.sh
 ```
 
-이게 전부입니다. `install.sh`가:
+`install.sh`는 기본 non-interactive (자동 yes) — `CLAUDESYNC_INTERACTIVE=1` 환경변수로 prompt 모드 활성.
 
-1. macOS 15+ / Xcode / xcodegen 사전점검
-2. Universal Release 빌드 (arm64 + x86_64)
-3. `/Applications/ClaudeSync.app` 설치 + Gatekeeper quarantine 플래그 제거
-4. 앱 실행 → 메뉴바 트레이 등장 + Bonjour 광고 확인
-
-다음에 메뉴바 안테나 아이콘을 클릭해 페어링 흐름 진행 → 끝.
-
-> 💡 두 번째 Mac에서도 똑같이 위 3줄. 양쪽 모두 launch되면 자동으로 서로 발견하고 페어링 UI를 띄웁니다.
+> 💡 두 번째 Mac에서도 똑같이. 양쪽 launch되면 자동으로 서로 발견하고 페어링 UI를 띄웁니다.
 
 ---
 

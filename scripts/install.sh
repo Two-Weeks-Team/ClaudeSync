@@ -64,23 +64,60 @@ if (( ${#MISSING[@]} > 0 )); then
     warn "Missing prerequisites:"
     for m in "${MISSING[@]}"; do echo "    - $m"; done
     echo ""
-    echo "Install via:"
-    echo "  ${BOLD}xcode-select --install${RESET}                            # CLT"
-    echo "  Mac App Store → install Xcode                       # full Xcode"
-    echo "  ${BOLD}brew install xcodegen${RESET}                             # xcodegen (needs Homebrew)"
-    echo ""
-    if [[ "${CI:-}" != "1" ]] && [[ "${CLAUDESYNC_AUTO_INSTALL:-}" != "1" ]]; then
-        read -r -p "Install xcodegen automatically via Homebrew? [y/N] " yn
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
-            if ! command -v brew >/dev/null 2>&1; then
-                err "Homebrew not found. Install from https://brew.sh first."
-                exit 1
+
+    # v1.1.1: default to non-interactive YES so a freshly-cloned Mac
+    # only needs `bash scripts/install.sh` (no prompt to answer).
+    # Override with CLAUDESYNC_INTERACTIVE=1 to get the [y/N] prompt back.
+    DO_INSTALL=1
+    if [[ "${CLAUDESYNC_INTERACTIVE:-}" == "1" ]]; then
+        read -r -p "Install xcodegen automatically via Homebrew? [Y/n] " yn
+        if [[ "$yn" =~ ^[Nn]$ ]]; then
+            DO_INSTALL=0
+        fi
+    else
+        say "Auto-installing missing tools (set CLAUDESYNC_INTERACTIVE=1 to be asked first)"
+    fi
+
+    if (( DO_INSTALL == 1 )); then
+        # 1) Xcode CLT — required by everything else.
+        for m in "${MISSING[@]}"; do
+            if [[ "$m" == "Xcode Command Line Tools" ]]; then
+                say "Installing Xcode Command Line Tools (this opens a system dialog — accept it)"
+                xcode-select --install 2>/dev/null || true
+                # Block until the user accepts and the install finishes.
+                until xcode-select -p >/dev/null 2>&1; do
+                    sleep 5
+                done
+                ok "Xcode Command Line Tools installed"
             fi
-            brew install xcodegen
-        else
-            err "Cannot proceed without xcodegen. Aborting."
+        done
+        # 2) Full Xcode — cannot be installed via CLI; must be Mac App Store.
+        if (( HAS_XCODEBUILD == 0 )); then
+            err "Full Xcode is required and must be installed manually from the Mac App Store."
+            err "After installing Xcode, accept its license:  sudo xcodebuild -license accept"
+            err "Then re-run:  bash scripts/install.sh"
             exit 1
         fi
+        # 3) Homebrew (needed for xcodegen).
+        if ! command -v brew >/dev/null 2>&1; then
+            say "Installing Homebrew (this is the official, non-interactive bootstrap from brew.sh)"
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            # Add brew to PATH for this session.
+            if [[ -x /opt/homebrew/bin/brew ]]; then
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+            elif [[ -x /usr/local/bin/brew ]]; then
+                eval "$(/usr/local/bin/brew shellenv)"
+            fi
+        fi
+        # 4) xcodegen.
+        if ! command -v xcodegen >/dev/null 2>&1; then
+            say "Installing xcodegen via Homebrew"
+            brew install xcodegen
+        fi
+        ok "All prerequisites satisfied"
+    else
+        err "Cannot proceed without xcodegen. Aborting."
+        exit 1
     fi
 fi
 
