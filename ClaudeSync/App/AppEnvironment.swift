@@ -46,6 +46,10 @@ final class AppEnvironment {
     /// In-memory copy of the most recently paired peer. Persisted through
     /// `preferences.pairedPeer` so the wiring survives app restarts (RCA-C3).
     var activePairedPeer: PairingManager.PairedPeer?
+    /// v1.1.1: surfaced from PeerDiscoveryActor when TLS factory fails
+    /// (e.g. openssl missing). UI shows a warning banner so the user
+    /// knows the control channel is plaintext-only.
+    var tlsDegradedReason: String?
 
     /// Snapshot of current preferences kept on the main actor for SwiftUI
     /// binding. Always written through `applyPreferences(_:)` so the
@@ -283,6 +287,9 @@ final class AppEnvironment {
             logger.warning("discovery setup failed: \(error)", category: "discovery")
             if overallStatus == .idle { overallStatus = .error("discovery failed") }
         }
+        // v1.1.1: surface TLS degradation (e.g. openssl missing) to the UI
+        // once we've actually attempted a handshake.
+        tlsDegradedReason = await discovery.tlsDegradedReason
     }
 
     /// v1.1 (RCA-M5/M6/M7): respond to network/sleep events. We *always*

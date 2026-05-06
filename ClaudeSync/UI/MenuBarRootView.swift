@@ -11,6 +11,9 @@ struct MenuBarRootView: View {
             header
             Divider()
             statusRow
+            if let reason = environment.tlsDegradedReason {
+                tlsWarningBanner(reason: reason)
+            }
             // RCA-C2: surface incoming/in-flight pairing in the menu bar so
             // the responder Mac can confirm without opening the onboarding
             // window. Before v1.0.1, only the onboarding window had this UI
@@ -278,6 +281,24 @@ struct MenuBarRootView: View {
             }
             .keyboardShortcut("q", modifiers: [.command])
         }
+    }
+
+    @ViewBuilder
+    private func tlsWarningBanner(reason: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "lock.open.trianglebadge.exclamationmark.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Control channel is plaintext")
+                    .font(.caption).bold()
+                Text("openssl missing — visual code + nonce + known_hosts still authenticate the peer. Install via `brew install openssl` and restart for TLS.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(6)
     }
 
     private func openSettings() {

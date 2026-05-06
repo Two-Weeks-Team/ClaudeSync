@@ -35,6 +35,10 @@ public actor PeerDiscoveryActor {
     /// When nil, the channel falls back to v1.0.x plaintext mode (used by
     /// the existing Loopback-only tests).
     private let tlsOptionsFactory: (@Sendable (String?) async throws -> NWProtocolTLS.Options)?
+    /// v1.1.1 (cross-Mac robustness): when TLS factory throws once, we
+    /// fall back to plaintext for the rest of the session and surface
+    /// a single warning instead of failing every connection attempt.
+    private var tlsDisabledReason: String?
 
     private var listener: NWListener?
     private var browser: NWBrowser?
@@ -47,6 +51,29 @@ public actor PeerDiscoveryActor {
         self.identity = identity
         self.publicKeyFingerprint = publicKeyFingerprint
         self.tlsOptionsFactory = tlsOptionsFactory
+    }
+
+    /// True if TLS is disabled this session (e.g. openssl missing on a
+    /// freshly-cloned Mac without Homebrew).
+    public var isTLSDegraded: Bool { tlsDisabledReason != nil }
+    public var tlsDegradedReason: String? { tlsDisabledReason }
+
+    /// Common path for both startAdvertising and connect: try TLS, on
+    /// throw degrade to plaintext for the rest of the session.
+    private func tlsOptionsOrFallback(pinnedFingerprint: String?) async -> NWProtocolTLS.Options? {
+        guard let factory = tlsOptionsFactory else { return nil }
+        if tlsDisabledReason != nil { return nil }
+        do {
+            return try await factory(pinnedFingerprint)
+        } catch {
+            let reason = String(describing: error)
+            tlsDisabledReason = reason
+            logger.warning(
+                "TLS unavailable (\(reason)) — falling back to plaintext for the Bonjour control channel. The visual code + nonce + known_hosts layers still authenticate the peer.",
+                category: "discovery"
+            )
+            return nil
+        }
     }
 
     public func events() -> AsyncStream<PeerEvent> {
@@ -74,12 +101,10 @@ public actor PeerDiscoveryActor {
         // v1.1 (SEC-002): if a TLS factory is configured, layer TLS over
         // the TCP transport. Listener side uses no pin (responder accepts
         // any incoming cert and surfaces it post-handshake for pinning).
-        let tlsOptions: NWProtocolTLS.Options?
-        if let factory = tlsOptionsFactory {
-            tlsOptions = try await factory(nil)
-        } else {
-            tlsOptions = nil
-        }
+        // v1.1.1: if the factory throws (e.g. openssl missing on a freshly
+        // cloned Mac), degrade to plaintext rather than failing the whole
+        // discovery setup.
+        let tlsOptions = await tlsOptionsOrFallback(pinnedFingerprint: nil)
         let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.includePeerToPeer = true
 
@@ -182,12 +207,7 @@ public actor PeerDiscoveryActor {
         guard let endpoint = endpointsByMachineId[peer.machineId] else {
             throw PeerDiscoveryError.noEndpointForPeer(peer.machineId)
         }
-        let tlsOptions: NWProtocolTLS.Options?
-        if let factory = tlsOptionsFactory {
-            tlsOptions = try await factory(pinnedFingerprint)
-        } else {
-            tlsOptions = nil
-        }
+        let tlsOptions = await tlsOptionsOrFallback(pinnedFingerprint: pinnedFingerprint)
         let parameters = NWParameters(tls: tlsOptions, tcp: NWProtocolTCP.Options())
         parameters.includePeerToPeer = true
         let framerOptions = NWProtocolFramer.Options(
