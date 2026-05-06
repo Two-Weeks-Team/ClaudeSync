@@ -197,16 +197,19 @@ sleep 2
 if pgrep -x ClaudeSync >/dev/null 2>&1; then
     PID=$(pgrep -x ClaudeSync | head -1)
     ok "ClaudeSync is running (PID $PID)"
-    # Sanity-check the Bonjour advertising — if dns-sd has it within 5s,
-    # the network/Bonjour stack came up cleanly.
+    # Sanity-check the Bonjour advertising — if dns-sd sees the service
+    # within 3s, the network/Bonjour stack came up cleanly.
     if command -v dns-sd >/dev/null 2>&1; then
-        if dns-sd -B _claudesync._tcp local. 2>&1 &
+        dns-sd -B _claudesync._tcp local. >/tmp/claudesync-dns-sd.log 2>&1 &
         DSPID=$!
         sleep 3
         kill $DSPID 2>/dev/null || true
-        wait 2>/dev/null || true
-        echo ""
-        ok "Bonjour advertising verified (see dns-sd output above for the registered UUID)"
+        wait $DSPID 2>/dev/null || true
+        if grep -q "_claudesync" /tmp/claudesync-dns-sd.log 2>/dev/null; then
+            ok "Bonjour advertising verified ($(grep -oE '[A-F0-9-]{36}' /tmp/claudesync-dns-sd.log | head -1))"
+        else
+            warn "Bonjour advertising not visible to dns-sd — Local Network permission may not be granted yet"
+        fi
     fi
 else
     warn "ClaudeSync did not stay running. Check Console.app filtering for 'ClaudeSync' for crash logs."
