@@ -1,6 +1,9 @@
 # ClaudeSync — Handoff Document
 
-## Project Status: v1.1.0 도달 — 다층 보안 + 자동 복구 + 단일 인스턴스 + 실작동 검증
+## Project Status: v1.1.0 정식 release — CI/CD 자동화 + DMG 배포 완료
+
+> 첫 GitHub Release (v1.1.0)이 GitHub Actions로 자동 빌드/업로드되었습니다.
+> 이제 사용자는 Xcode 없이 `curl ... | bash` 한 줄로 설치 가능.
 
 ### 마지막 세션 (2026-05-05) 성과 요약
 
@@ -50,13 +53,25 @@
 | DMG 패키징 | ✅ 1.7 MB |
 | 0 memory leaks | ✅ |
 
-### v1.0 final 출하 잔여 (사용자 자격증명 필수)
+### v1.0 final 출하 — 잔여
 
-- [ ] Developer ID Application 서명 (`CODESIGN_IDENTITY`)
-- [ ] xcrun notarytool 공증 (`NOTARY_PROFILE`)
-- [ ] 두 Mac 실기 검증 (`docs/DEMO_TWO_MACS.md`)
-- [ ] `gh release create v1.1.0 dist/ClaudeSync-1.1.0.dmg`
-- [ ] 72시간 dogfood 안정성 테스트
+- [x] ~~`gh release create v1.1.0 dist/ClaudeSync-1.1.0.dmg`~~ → **GitHub Actions가 자동화 (release.yml)**
+- [x] ~~CI/CD 구성~~ → **ci.yml + release.yml 동작 중**
+- [ ] **Developer ID Application 서명** (선택, repo secrets에 인증서 base64 추가 시 자동)
+- [ ] **xcrun notarytool 공증** (선택, secrets에 Apple ID 추가 시 자동)
+- [ ] **두 Mac 실기 검증** (`docs/DEMO_TWO_MACS.md`)
+- [ ] **72시간 dogfood 안정성 테스트**
+
+### CI/CD 워크플로
+
+| 파일 | 트리거 | 결과 |
+|------|--------|------|
+| `.github/workflows/ci.yml` | push to main / PR / 수동 | macos-15 runner에서 build + 214 test 자동, count regression 검사 |
+| `.github/workflows/release.yml` | `v*` 태그 push / 수동 | Universal DMG + SHA-256 sidecar + 자동 release notes → GitHub Release |
+
+서명/공증 자격증명을 GitHub repo secrets에 추가하면 release workflow가 자동 codesign + notarize:
+- `CODESIGN_IDENTITY_NAME`, `CODESIGN_CERT_BASE64`, `CODESIGN_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`
+- `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_APP_PASSWORD`
 
 ### v1.2 후보 (의도적 보류)
 
