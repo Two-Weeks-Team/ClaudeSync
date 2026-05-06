@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"            # v1.1.0, v1.2.0-beta1, …
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name to release (e.g. v1.1.0). Required for manual runs."
+        required: true
+
+permissions:
+  contents: write       # to create the GitHub Release + upload assets
+
+jobs:
+  build-dmg:
+    name: Build Universal DMG + GitHub Release
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            tag_name="${GITHUB_REF#refs/tags/}"
+            echo "name=$tag_name" >> "$GITHUB_OUTPUT"
+            echo "ref=$tag_name" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Show macOS + Xcode versions
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Install xcodegen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build Universal Release (arm64 + x86_64)
+        run: bash scripts/release-build.sh
+
+      - name: Optional codesign (only when secrets are configured)
+        if: ${{ env.CODESIGN_IDENTITY_NAME != '' }}
+        env:
+          # Set these as repository / organization secrets to enable
+          # Developer ID signing. When unset (the default), the DMG is
+          # ad-hoc signed and Gatekeeper will require xattr-strip on
+          # first launch — see install.sh.
+          CODESIGN_IDENTITY_NAME:    ${{ secrets.CODESIGN_IDENTITY_NAME }}
+          CODESIGN_CERT_BASE64:      ${{ secrets.CODESIGN_CERT_BASE64 }}
+          CODESIGN_CERT_PASSWORD:    ${{ secrets.CODESIGN_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD:         ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/claudesync-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$CODESIGN_CERT_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" \
+              -P "$CODESIGN_CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # Tell scripts/package.sh to use this identity.
+          echo "CODESIGN_IDENTITY=$CODESIGN_IDENTITY_NAME" >> "$GITHUB_ENV"
+
+      - name: Optional notary credentials (only when secrets are configured)
+        if: ${{ env.NOTARY_APPLE_ID != '' }}
+        env:
+          NOTARY_APPLE_ID:        ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID:         ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD:    ${{ secrets.NOTARY_APP_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials ClaudeSync \
+              --apple-id "$NOTARY_APPLE_ID" \
+              --team-id "$NOTARY_TEAM_ID" \
+              --password "$NOTARY_APP_PASSWORD"
+          echo "NOTARY_PROFILE=ClaudeSync" >> "$GITHUB_ENV"
+
+      - name: Build DMG (with codesign + notary if configured, else ad-hoc)
+        run: bash scripts/package.sh
+
+      - name: Verify DMG and bundle
+        run: |
+          DMG=$(ls dist/ClaudeSync-*.dmg | head -1)
+          echo "DMG: $DMG"
+          ls -lh "$DMG"
+          shasum -a 256 "$DMG"
+          # Mount, inspect, unmount.
+          MNT=$(hdiutil attach "$DMG" -nobrowse | tail -1 | awk '{print $NF}')
+          echo "Mounted at $MNT"
+          ls -la "$MNT"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$MNT/ClaudeSync.app/Contents/Info.plist"
+          lipo -info "$MNT/ClaudeSync.app/Contents/MacOS/ClaudeSync"
+          hdiutil detach "$MNT"
+
+      - name: Generate SHA-256 sidecar
+        run: |
+          cd dist
+          for f in *.dmg; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
+          ls -la
+
+      - name: Generate release notes from CHANGELOG / commits
+        id: notes
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          echo "Generating notes for $TAG"
+          # Grab the last tag for diff-since.
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 || true)
+          {
+            echo "## ClaudeSync $TAG"
+            echo ""
+            echo "### Install (one line)"
+            echo '```bash'
+            echo 'curl -fsSL https://raw.githubusercontent.com/Two-Weeks-Team/ClaudeSync/main/scripts/web-install.sh | bash'
+            echo '```'
+            echo ""
+            echo "Or download the DMG below, drag ClaudeSync.app to /Applications, then:"
+            echo '```bash'
+            echo 'xattr -d com.apple.quarantine /Applications/ClaudeSync.app'
+            echo 'open /Applications/ClaudeSync.app'
+            echo '```'
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "### Changes since $PREV_TAG"
+              git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG" | head -50
+            else
+              echo "### Initial release"
+            fi
+            echo ""
+            echo ""
+            echo "### Verify SHA-256"
+            echo '```'
+            cat dist/*.sha256
+            echo '```'
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release + upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ClaudeSync ${{ steps.tag.outputs.name }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
+          files: |
+            dist/*.dmg
+            dist/*.sha256

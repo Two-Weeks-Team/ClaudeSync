@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Avoid wasting CI minutes on doc-only commits.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build + Test (macOS 15)
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Show macOS + Xcode versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Homebrew
+          key: brew-${{ runner.os }}-xcodegen
+          restore-keys: brew-${{ runner.os }}-
+
+      - name: Install xcodegen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache Swift Package Manager + DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            .build
+          key: derived-${{ runner.os }}-${{ hashFiles('project.yml', 'ClaudeSync.xcodeproj/project.pbxproj') }}
+          restore-keys: derived-${{ runner.os }}-
+
+      - name: Build (Debug)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme ClaudeSync \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/ci-DD \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build \
+          | tail -50
+
+      - name: Run tests (214 expected)
+        env:
+          # SingleInstanceGuard already auto-skips when XCTestConfigurationFilePath
+          # is set, but belt-and-braces.
+          CLAUDESYNC_DISABLE_SINGLE_INSTANCE: "1"
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme ClaudeSync \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/ci-DD \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            test \
+          | tee test-output.log
+          # Hard-fail if the expected test count drops — catches accidentally
+          # disabled tests.
+          if ! grep -E "Executed [0-9]+ tests, with 0 failures" test-output.log >/dev/null; then
+            echo "::error::Test run did not show clean PASS line"
+            exit 1
+          fi
+          executed=$(grep -oE "Executed [0-9]+ tests" test-output.log | tail -1 | grep -oE "[0-9]+")
+          if [ "${executed:-0}" -lt 214 ]; then
+            echo "::error::Test count regressed: $executed (expected ≥214)"
+            exit 1
+          fi
+          echo "::notice::All $executed tests passed"
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ github.run_id }}
+          path: |
+            test-output.log
+            ~/Library/Developer/Xcode/DerivedData/ClaudeSync-*/Logs/Test/
+          retention-days: 7
+
+      - name: Verify Release builds (smoke)
+        run: |
+          set -o pipefail
+          # Lightweight Release build to catch arch/optimizer regressions
+          # without running the full 60s Universal pipeline on every PR.
+          xcodebuild \
+            -scheme ClaudeSync \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath .build/release-smoke-DD \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build \
+          | tail -20
