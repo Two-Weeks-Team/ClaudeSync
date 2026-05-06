@@ -99,13 +99,26 @@ jobs:
 
       - name: Verify DMG and bundle
         run: |
+          set -euo pipefail
           DMG=$(ls dist/ClaudeSync-*.dmg | head -1)
           echo "DMG: $DMG"
           ls -lh "$DMG"
           shasum -a 256 "$DMG"
-          # Mount, inspect, unmount.
-          MNT=$(hdiutil attach "$DMG" -nobrowse | tail -1 | awk '{print $NF}')
-          echo "Mounted at $MNT"
+          # Mount via -plist so the mount-point parses correctly even when
+          # the volume name contains spaces (e.g. "ClaudeSync 1.1.0").
+          # `awk '{print $NF}'` would otherwise truncate "/Volumes/ClaudeSync 1.1.0"
+          # to "1.1.0".
+          PLIST=$(hdiutil attach "$DMG" -nobrowse -noverify -noautoopen -plist)
+          MNT=$(/usr/libexec/PlistBuddy -c "Print :system-entities:0:mount-point" /dev/stdin <<<"$PLIST" 2>/dev/null)
+          if [ -z "$MNT" ] || [ ! -d "$MNT" ]; then
+            # Fallback for plist layouts where mount-point lives on a different entity.
+            for i in 0 1 2 3; do
+              cand=$(/usr/libexec/PlistBuddy -c "Print :system-entities:$i:mount-point" /dev/stdin <<<"$PLIST" 2>/dev/null || true)
+              if [ -n "$cand" ] && [ -d "$cand" ]; then MNT="$cand"; break; fi
+            done
+          fi
+          echo "Mounted at: '$MNT'"
+          [ -d "$MNT" ] || { echo "::error::could not resolve DMG mount point"; exit 1; }
           ls -la "$MNT"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$MNT/ClaudeSync.app/Contents/Info.plist"
           lipo -info "$MNT/ClaudeSync.app/Contents/MacOS/ClaudeSync"

@@ -94,11 +94,14 @@ jobs:
             exit 1
           fi
           executed=$(grep -oE "Executed [0-9]+ tests" test-output.log | tail -1 | grep -oE "[0-9]+")
-          if [ "${executed:-0}" -lt 214 ]; then
-            echo "::error::Test count regressed: $executed (expected ≥214)"
+          # Local Mac: 214. CI: 211 because 3 FSEvents-driven tests in
+          # FileWatcherActorTests skip themselves when CI=1 (FSEvents is
+          # unreliable in headless GitHub Actions runners).
+          if [ "${executed:-0}" -lt 211 ]; then
+            echo "::error::Test count regressed: $executed (expected ≥211 in CI)"
             exit 1
           fi
-          echo "::notice::All $executed tests passed"
+          echo "::notice::$executed tests passed (3 FSEvents tests skipped under CI is expected)"
 
       - name: Upload test logs on failure
         if: failure()
