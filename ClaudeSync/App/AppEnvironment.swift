@@ -24,6 +24,10 @@ final class AppEnvironment {
     /// v1.1 (SEC-002): owns the local TLS identity used for the Bonjour
     /// control channel.
     let tlsProvider: TLSCertificateProvider
+    /// v1.2: shares pairing fingerprints across the user's Macs via
+    /// iCloud Keychain so same-Apple-ID Macs auto-pair without the
+    /// visual 6-digit code.
+    let iCloudShare: ICloudPairingShare
 
     /// Onboarding state machine — bound to the FirstLaunchPairingView.
     /// v1.0.1 (RCA-C1): closures wired so the view's Accept/Confirm/Reject
@@ -60,6 +64,11 @@ final class AppEnvironment {
     private var activePairing: PairingManager?
     private var activePairingTask: Task<Void, Never>?
     private var activeChannel: PeerChannel?
+    /// v1.2: when set, the in-flight pairing was initiated via iCloud
+    /// Keychain auto-pair. The observation closure auto-clicks Accept
+    /// and Confirm IF the peer's actual fingerprint matches this value
+    /// (defense-in-depth — keychain match could in theory be stale).
+    private var autoPairExpectedFingerprint: String?
     /// v1.1 (RCA-M5/M6/M7): observes Wi-Fi flaps + sleep/wake and triggers
     /// discovery restart with a small backoff so we don't thrash sshd or
     /// mDNSResponder.
@@ -118,6 +127,7 @@ final class AppEnvironment {
         )
         self.preferences = PreferencesStore()
         self.launchAtLogin = LaunchAtLoginController(logger: logger)
+        self.iCloudShare = ICloudPairingShare(logger: logger)
         self.currentPreferences = initialPrefs
         self.onboardingViewModel = OnboardingViewModel()
         self.activePairedPeer = AppEnvironment.restorePairedPeer(from: initialPrefs)
@@ -211,6 +221,13 @@ final class AppEnvironment {
         guard !isAutoStarted else { return }
         isAutoStarted = true
         logger.info("Booting sync engine + discovery", category: "app")
+
+        // v1.2: publish our own pairing record to iCloud Keychain so any
+        // other Mac signed into the same Apple ID can find us. Failure
+        // is non-fatal — graceful fallback to the v1.1 visual-code path.
+        if currentPreferences.autoPairSameAppleID {
+            await publishOwnICloudRecord()
+        }
         // RCA-M1: include .projects in the watch set so on-demand pulls work
         // when the user clicks "Force Sync" on Documents/GitHub. Without
         // this the watcher never spins up the project FSEvent stream.
@@ -256,6 +273,11 @@ final class AppEnvironment {
                     // RCA-C1 wiring: nudge onboarding from "discovery" to
                     // "pairingCode" once any peer is visible.
                     self.onboardingViewModel.discoveryFoundPeer()
+                    // v1.2: if iCloud Keychain has a matching record for
+                    // this peer's machineId AND auto-pair is enabled
+                    // AND we don't already have a paired peer, kick off
+                    // an automatic pairing — visual code skipped.
+                    await self.maybeAutoPair(with: info)
                 case .peerDisappeared(let mid):
                     self.discoveredPeers.removeAll { $0.machineId == mid }
                 case .incomingConnection(let channel, _):
@@ -273,6 +295,61 @@ final class AppEnvironment {
                     await self.restartDiscoveryWithCooldown()
                 }
             }
+        }
+    }
+
+    /// v1.2: write our own pairing record to iCloud Keychain. Same-Apple-ID
+    /// Macs will see this within seconds and can auto-pair.
+    private func publishOwnICloudRecord() async {
+        let myMachineId = AppEnvironment.persistentMachineId()
+        // Need our public key fingerprint for the record. Generate the
+        // SSH keypair if needed; non-fatal if it fails (we just skip
+        // iCloud publishing — visual-code flow still works).
+        do {
+            try await sshKeys.ensureKeyPair()
+            let fingerprint = try await sshKeys.publicKeyFingerprint()
+            let hostKey = (try? PairingManager.readLocalSshHostKey()) ?? ""
+            let record = ICloudPairingShare.PeerRecord(
+                machineId: myMachineId,
+                hostname: AppEnvironment.localBonjourHostname(),
+                username: NSUserName(),
+                sshPort: 22,
+                publicKeyFingerprint: fingerprint,
+                sshHostKey: hostKey
+            )
+            _ = iCloudShare.publish(record)
+        } catch {
+            logger.info("Skipped iCloud publish: \(error)",
+                        category: "icloud-pair")
+        }
+    }
+
+    /// v1.2: when a peer appears via Bonjour, check whether iCloud Keychain
+    /// has a matching record. If yes — same Apple ID, peer's TLS/SSH
+    /// fingerprint matches what's published, and the user hasn't disabled
+    /// auto-pair — initiate pairing AND auto-confirm without showing the
+    /// 6-digit code.
+    private func maybeAutoPair(with info: PeerInfo) async {
+        // Preconditions
+        guard currentPreferences.autoPairSameAppleID else { return }
+        guard activePairing == nil else { return }              // mid-handshake
+        guard activePairedPeer == nil else { return }           // already paired
+        guard let record = iCloudShare.lookup(machineId: info.machineId) else {
+            return  // peer not on the same Apple ID — fall through to manual flow
+        }
+        logger.info("iCloud Keychain match for \(info.hostname) — initiating auto-pair",
+                    category: "icloud-pair")
+
+        // Mark this session as auto so the PairingManager observation
+        // closure auto-clicks both Accept and Confirm when the codes
+        // arrive (we still verify the cross-fingerprint server-side).
+        autoPairExpectedFingerprint = record.publicKeyFingerprint
+        do {
+            try await initiatePairing(with: info)
+        } catch {
+            autoPairExpectedFingerprint = nil
+            logger.warning("Auto-pair initiate failed: \(error)",
+                           category: "icloud-pair")
         }
     }
 
@@ -354,6 +431,22 @@ final class AppEnvironment {
             await channel.close()
             return
         }
+        // v1.2: if auto-pair is enabled AND iCloud Keychain has any
+        // record (we don't yet know WHICH peer is calling — pairRequest
+        // hasn't arrived — so set a sentinel that the observation
+        // closure will validate against the actual peer fingerprint
+        // once it arrives).
+        if currentPreferences.autoPairSameAppleID {
+            // Pick the first record whose machineId isn't ours; if
+            // there are multiple iCloud peers this is best-effort.
+            let myId = AppEnvironment.persistentMachineId()
+            if let candidate = iCloudShare.allRecords()
+                .first(where: { $0.machineId != myId }) {
+                autoPairExpectedFingerprint = candidate.publicKeyFingerprint
+                logger.info("Inbound pair while iCloud record present — auto-pair armed",
+                            category: "icloud-pair")
+            }
+        }
         let manager = makePairingManager(channel: channel)
         await beginPairingObservation(manager: manager)
         // Start listening so incoming pairRequest is processed.
@@ -390,6 +483,10 @@ final class AppEnvironment {
             p.pairedPeer = nil
             return p
         }())
+        // v1.2: also remove our own iCloud Keychain record so a previously-
+        // paired Mac doesn't keep auto-pairing back to us. The other Mac
+        // can re-publish its own record when it next launches.
+        iCloudShare.unpublish(machineId: AppEnvironment.persistentMachineId())
         overallStatus = isAutoStarted ? .discovering : .idle
         needsOnboarding = true
     }
@@ -414,6 +511,29 @@ final class AppEnvironment {
                 if case .stateChanged(let newState) = event {
                     self.activePairingState = newState
                     self.onboardingViewModel.updatePairingState(newState)
+
+                    // v1.2: iCloud-Keychain auto-pair fast path —
+                    // auto-click Accept (responder) and Confirm
+                    // (initiator) when the peer's fingerprint matches
+                    // what was published to iCloud Keychain.
+                    if let expectedFP = self.autoPairExpectedFingerprint {
+                        switch newState {
+                        case .receivedPairRequest(let req, _):
+                            if req.publicKeyFingerprint == expectedFP {
+                                self.logger.info("Auto-Accept (iCloud match)",
+                                                 category: "icloud-pair")
+                                await self.acceptPendingPairing()
+                            }
+                        case .receivedPairAccept(let accept, _):
+                            if accept.publicKeyFingerprint == expectedFP {
+                                self.logger.info("Auto-Confirm (iCloud match)",
+                                                 category: "icloud-pair")
+                                await self.confirmPairingCode()
+                            }
+                        default: break
+                        }
+                    }
+
                     if case .completed(let paired) = newState {
                         await self.handlePairingCompleted(paired)
                     }
@@ -499,6 +619,9 @@ final class AppEnvironment {
         if let ch = activeChannel { await ch.close() }
         activeChannel = nil
         activePairing = nil
+        // v1.2: clear the auto-pair sentinel so the next handshake
+        // starts cleanly.
+        autoPairExpectedFingerprint = nil
     }
 
     private func wireOnboardingCallbacks() {

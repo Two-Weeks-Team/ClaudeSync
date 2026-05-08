@@ -42,6 +42,13 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                Toggle("Auto-pair Macs signed into the same Apple ID",
+                       isOn: $draft.autoPairSameAppleID)
+                Text("Uses iCloud Keychain (end-to-end encrypted) to share a pairing fingerprint between your Macs. When matched, the 6-digit visual code is skipped — the Apple ID itself is the auth factor. Requires iCloud Keychain enabled on both Macs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 LabeledContent("Launch status") {
                     Text(launchStatusLabel)
                         .font(.caption)
