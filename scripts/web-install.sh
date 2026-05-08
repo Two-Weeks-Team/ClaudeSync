@@ -96,7 +96,7 @@ EOF
     ok "Found DMG: $dmg_name"
     local tmp="$RUNNER_TEMP_DIR"
     mkdir -p "$tmp"
-    say "Downloading $dmg_name…"
+    say "Downloading ${dmg_name}…"
     curl -fSL --progress-bar "$dmg_url" -o "$tmp/$dmg_name"
 
     if [[ -n "$sha_url" ]]; then
@@ -117,7 +117,7 @@ EOF
     say "Mounting DMG…"
     local mountpoint
     mountpoint=$(hdiutil attach "$tmp/$dmg_name" -nobrowse -noverify -noautoopen \
-                 | tail -1 | awk '{print $NF}')
+                 | tail -1 | awk -F'\t' '{print $NF}')
     if [[ -z "$mountpoint" || ! -d "$mountpoint/ClaudeSync.app" ]]; then
         err "DMG did not contain ClaudeSync.app at the expected path"
         return 1
