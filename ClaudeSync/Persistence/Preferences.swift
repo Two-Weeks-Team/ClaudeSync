@@ -22,22 +22,33 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// the user doesn't need to re-pair on every restart (RCA-C3).
     public var pairedPeer: PairedPeerRecord?
 
+    /// v1.2: when true, ClaudeSync auto-pairs with another Mac that
+    /// publishes a matching record to iCloud Keychain (i.e. another Mac
+    /// signed into the same Apple ID). The visual 6-digit code is
+    /// skipped because same-Apple-ID is itself the auth factor.
+    /// Defaults to true — set false to keep the v1.1 manual-confirm flow.
+    public var autoPairSameAppleID: Bool
+
     public init(
         bandwidthLimitKBps: Int = 0,
         extraExcludes: [String: [String]] = [:],
         launchAtLogin: Bool = false,
-        pairedPeer: PairedPeerRecord? = nil
+        pairedPeer: PairedPeerRecord? = nil,
+        autoPairSameAppleID: Bool = true
     ) {
         self.bandwidthLimitKBps = bandwidthLimitKBps
         self.extraExcludes = extraExcludes
         self.launchAtLogin = launchAtLogin
         self.pairedPeer = pairedPeer
+        self.autoPairSameAppleID = autoPairSameAppleID
     }
 
     // Codable backwards compatibility — older preferences.json files don't
-    // have `pairedPeer`. Decode a missing field as nil instead of failing.
+    // have `pairedPeer` / `autoPairSameAppleID`. Decode missing fields
+    // with v1.2 defaults instead of failing.
     private enum CodingKeys: String, CodingKey {
-        case bandwidthLimitKBps, extraExcludes, launchAtLogin, pairedPeer
+        case bandwidthLimitKBps, extraExcludes, launchAtLogin, pairedPeer,
+             autoPairSameAppleID
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -46,6 +57,8 @@ public struct Preferences: Codable, Equatable, Sendable {
                                                    forKey: .extraExcludes) ?? [:]
         self.launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         self.pairedPeer = try c.decodeIfPresent(PairedPeerRecord.self, forKey: .pairedPeer)
+        self.autoPairSameAppleID = try c.decodeIfPresent(Bool.self,
+                                                        forKey: .autoPairSameAppleID) ?? true
     }
 }
 
