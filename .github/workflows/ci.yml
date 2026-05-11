@@ -103,12 +103,12 @@ jobs:
             exit 1
           fi
           executed=$(grep -oE "Executed [0-9]+ tests" test-output.log | tail -1 | grep -oE "[0-9]+")
-          # Local Mac: 221 (1 iCloud Keychain test may auto-skip).
-          # CI: 218 because the 3 FSEvents-driven tests in
+          # Local Mac: 231 (1 iCloud Keychain test may auto-skip).
+          # CI: 228 because the 3 FSEvents-driven tests in
           # FileWatcherActorTests are -skip-testing'd (FSEvents is
           # unreliable in headless GitHub Actions runners).
-          if [ "${executed:-0}" -lt 218 ]; then
-            echo "::error::Test count regressed: $executed (expected ≥218 in CI)"
+          if [ "${executed:-0}" -lt 228 ]; then
+            echo "::error::Test count regressed: $executed (expected ≥228 in CI)"
             exit 1
           fi
           echo "::notice::$executed tests passed (3 FSEvents skipped under CI is expected)"

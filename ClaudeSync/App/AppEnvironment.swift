@@ -28,6 +28,10 @@ final class AppEnvironment {
     /// iCloud Keychain so same-Apple-ID Macs auto-pair without the
     /// visual 6-digit code.
     let iCloudShare: ICloudPairingShare
+    /// v1.2.1: file-based fallback when iCloud Keychain is unavailable
+    /// (errSecMissingEntitlement on ad-hoc-signed apps, the common case).
+    /// Uses ~/Library/Mobile Documents/com.apple.CloudDocs/ClaudeSync/peers/.
+    let iCloudDriveShare: ICloudDrivePairingShare
 
     /// Onboarding state machine — bound to the FirstLaunchPairingView.
     /// v1.0.1 (RCA-C1): closures wired so the view's Accept/Confirm/Reject
@@ -128,6 +132,9 @@ final class AppEnvironment {
         self.preferences = PreferencesStore()
         self.launchAtLogin = LaunchAtLoginController(logger: logger)
         self.iCloudShare = ICloudPairingShare(logger: logger)
+        self.iCloudDriveShare = ICloudDrivePairingShare(
+            homeDirectory: homeDirectory, logger: logger
+        )
         self.currentPreferences = initialPrefs
         self.onboardingViewModel = OnboardingViewModel()
         self.activePairedPeer = AppEnvironment.restorePairedPeer(from: initialPrefs)
@@ -298,13 +305,16 @@ final class AppEnvironment {
         }
     }
 
-    /// v1.2: write our own pairing record to iCloud Keychain. Same-Apple-ID
-    /// Macs will see this within seconds and can auto-pair.
+    /// v1.2: write our own pairing record to iCloud Keychain (preferred)
+    /// AND iCloud Drive (v1.2.1 fallback). At least one needs to work
+    /// for auto-pair; if both fail, the visual-code flow still works.
+    ///
+    /// Why both: iCloud Keychain requires `keychain-access-groups`
+    /// entitlement which ad-hoc-signed builds don't have
+    /// (errSecMissingEntitlement). iCloud Drive needs only file system
+    /// access — works without Apple Developer Program. Belt and braces.
     private func publishOwnICloudRecord() async {
         let myMachineId = AppEnvironment.persistentMachineId()
-        // Need our public key fingerprint for the record. Generate the
-        // SSH keypair if needed; non-fatal if it fails (we just skip
-        // iCloud publishing — visual-code flow still works).
         do {
             try await sshKeys.ensureKeyPair()
             let fingerprint = try await sshKeys.publicKeyFingerprint()
@@ -317,11 +327,38 @@ final class AppEnvironment {
                 publicKeyFingerprint: fingerprint,
                 sshHostKey: hostKey
             )
-            _ = iCloudShare.publish(record)
+            let keychainOK = iCloudShare.publish(record)
+            let driveOK    = iCloudDriveShare.publish(record)
+            if !keychainOK && !driveOK {
+                logger.info("Neither iCloud Keychain nor iCloud Drive available — visual-code flow only",
+                            category: "icloud-pair")
+            } else if !keychainOK && driveOK {
+                logger.info("iCloud Drive fallback active — auto-pair will use file-based sync",
+                            category: "icloud-pair")
+            }
         } catch {
             logger.info("Skipped iCloud publish: \(error)",
                         category: "icloud-pair")
         }
+    }
+
+    /// Combined lookup: Keychain first, then Drive. Returns the first
+    /// match (Keychain takes priority since it's E2E-encrypted).
+    private func iCloudLookup(machineId: UUID) -> ICloudPairingShare.PeerRecord? {
+        if let r = iCloudShare.lookup(machineId: machineId) { return r }
+        return iCloudDriveShare.lookup(machineId: machineId)
+    }
+
+    /// Combined enumerate: union of Keychain + Drive records, dedupe
+    /// by machineId. Used by the responder side which doesn't yet know
+    /// which machineId to look up.
+    private func iCloudAllRecords() -> [ICloudPairingShare.PeerRecord] {
+        var seen: Set<UUID> = []
+        var out: [ICloudPairingShare.PeerRecord] = []
+        for r in iCloudShare.allRecords() + iCloudDriveShare.allRecords() {
+            if seen.insert(r.machineId).inserted { out.append(r) }
+        }
+        return out
     }
 
     /// v1.2: when a peer appears via Bonjour, check whether iCloud Keychain
@@ -334,7 +371,7 @@ final class AppEnvironment {
         guard currentPreferences.autoPairSameAppleID else { return }
         guard activePairing == nil else { return }              // mid-handshake
         guard activePairedPeer == nil else { return }           // already paired
-        guard let record = iCloudShare.lookup(machineId: info.machineId) else {
+        guard let record = iCloudLookup(machineId: info.machineId) else {
             return  // peer not on the same Apple ID — fall through to manual flow
         }
         logger.info("iCloud Keychain match for \(info.hostname) — initiating auto-pair",
@@ -440,7 +477,7 @@ final class AppEnvironment {
             // Pick the first record whose machineId isn't ours; if
             // there are multiple iCloud peers this is best-effort.
             let myId = AppEnvironment.persistentMachineId()
-            if let candidate = iCloudShare.allRecords()
+            if let candidate = iCloudAllRecords()
                 .first(where: { $0.machineId != myId }) {
                 autoPairExpectedFingerprint = candidate.publicKeyFingerprint
                 logger.info("Inbound pair while iCloud record present — auto-pair armed",
@@ -483,10 +520,11 @@ final class AppEnvironment {
             p.pairedPeer = nil
             return p
         }())
-        // v1.2: also remove our own iCloud Keychain record so a previously-
-        // paired Mac doesn't keep auto-pairing back to us. The other Mac
-        // can re-publish its own record when it next launches.
-        iCloudShare.unpublish(machineId: AppEnvironment.persistentMachineId())
+        // v1.2 / v1.2.1: remove our own record from BOTH share channels
+        // so a previously-paired Mac doesn't keep auto-pairing back to us.
+        let myId = AppEnvironment.persistentMachineId()
+        iCloudShare.unpublish(machineId: myId)
+        iCloudDriveShare.unpublish(machineId: myId)
         overallStatus = isAutoStarted ? .discovering : .idle
         needsOnboarding = true
     }
