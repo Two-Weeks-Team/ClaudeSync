@@ -70,7 +70,7 @@ jobs:
             build \
           | tail -50
 
-      - name: Run tests (232 expected on CI; 235 locally)
+      - name: Run tests (236 expected on CI; 239 locally)
         env:
           # SingleInstanceGuard already auto-skips when XCTestConfigurationFilePath
           # is set, but belt-and-braces.
@@ -103,12 +103,12 @@ jobs:
             exit 1
           fi
           executed=$(grep -oE "Executed [0-9]+ tests" test-output.log | tail -1 | grep -oE "[0-9]+")
-          # Local Mac: 235 (1 iCloud Keychain test may auto-skip).
-          # CI: 232 because the 3 FSEvents-driven tests in
+          # Local Mac: 239 (1 iCloud Keychain test may auto-skip).
+          # CI: 236 because the 3 FSEvents-driven tests in
           # FileWatcherActorTests are -skip-testing'd (FSEvents is
           # unreliable in headless GitHub Actions runners).
-          if [ "${executed:-0}" -lt 232 ]; then
-            echo "::error::Test count regressed: $executed (expected ≥232 in CI)"
+          if [ "${executed:-0}" -lt 236 ]; then
+            echo "::error::Test count regressed: $executed (expected ≥236 in CI)"
             exit 1
           fi
           echo "::notice::$executed tests passed (3 FSEvents skipped under CI is expected)"

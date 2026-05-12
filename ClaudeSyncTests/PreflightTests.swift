@@ -201,4 +201,12 @@ final class SystemSettingsLinkTests: XCTestCase {
     func testLocalNetworkURL_pointsToLocalNetworkPrivacy() {
         XCTAssertTrue(SystemSettingsLink.localNetwork.absoluteString.contains("Privacy_LocalNetwork"))
     }
+
+    func testFirewallURL_hasCorrectScheme() {
+        XCTAssertEqual(SystemSettingsLink.firewall.scheme, "x-apple.systempreferences")
+    }
+
+    func testFirewallURL_pointsToFirewallPane() {
+        XCTAssertTrue(SystemSettingsLink.firewall.absoluteString.contains("Firewall"))
+    }
 }

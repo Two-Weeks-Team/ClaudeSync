@@ -198,9 +198,15 @@ public struct FirstLaunchPairingView: View {
                     }
                 }
             } else {
-                Text("Make sure the other Mac is awake, on the same WiFi, and running ClaudeSync.")
+                Text("Make sure the other Mac is awake, on the same WiFi, and running ClaudeSync. If it still doesn't appear, check that the macOS firewall allows ClaudeSync and the Local Network permission is on — on both Macs.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                HStack {
+                    Button("Open Firewall Settings") { model.openSystemSettingsForFirewall() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    Button("Open Local Network Settings") { model.openSystemSettingsForLocalNetwork() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                }
             }
             HStack {
                 Spacer()
@@ -234,12 +240,47 @@ public struct FirstLaunchPairingView: View {
             case .rejected(let reason):
                 statusRow(systemImage: "xmark.octagon.fill", color: .red,
                           text: "Pairing rejected: \(reason)")
+                pairingRetryRow
             case .failed(let message):
                 statusRow(systemImage: "exclamationmark.triangle.fill", color: .orange,
                           text: "Pairing failed: \(message)")
+                networkTroubleshooting
+                pairingRetryRow
             default:
                 ProgressView("Waiting for the other Mac…")
             }
+        }
+    }
+
+    /// Shown under a pairing failure. The #1 cause of "connection to peer
+    /// lost" on a LAN is the macOS application firewall RST'ing the inbound
+    /// connection, or Local Network permission never having been granted —
+    /// both one click away from here. (Either Mac can be the culprit.)
+    private var networkTroubleshooting: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("If both Macs are on the same Wi-Fi, the usual cause is the macOS firewall blocking ClaudeSync, or the Local Network permission being off — on either Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Open Firewall Settings") { model.openSystemSettingsForFirewall() }
+                    .buttonStyle(.bordered)
+                Button("Open Local Network Settings") { model.openSystemSettingsForLocalNetwork() }
+                    .buttonStyle(.bordered)
+            }
+            Text("In Firewall → Options: allow incoming connections for ClaudeSync, and turn off “Block all incoming connections” / stealth mode. Then click “Try pairing again”. Do the same on the other Mac.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    private var pairingRetryRow: some View {
+        HStack {
+            Spacer()
+            Button("Try pairing again") { model.retryPairing() }
+                .buttonStyle(.borderedProminent)
         }
     }
 

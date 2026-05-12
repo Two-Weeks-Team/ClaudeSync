@@ -84,8 +84,20 @@ struct MenuBarRootView: View {
                 Text("Waiting for peer to accept…").font(.caption)
             }
         case .failed(let msg):
-            Label("Pairing failed: \(msg)", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Pairing failed: \(msg)", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                Text("Usual cause on a LAN: the macOS firewall blocking ClaudeSync, or Local Network permission off — on either Mac.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                HStack {
+                    Button("Firewall Settings") {
+                        environment.onboardingViewModel.openSystemSettingsForFirewall()
+                    }.buttonStyle(.bordered).controlSize(.small)
+                    Button("Local Network") {
+                        environment.onboardingViewModel.openSystemSettingsForLocalNetwork()
+                    }.buttonStyle(.bordered).controlSize(.small)
+                }
+            }
         case .rejected(let reason):
             Label("Pairing rejected: \(reason)", systemImage: "xmark.octagon.fill")
                 .font(.caption).foregroundStyle(.red)
