@@ -148,6 +148,24 @@ say "Generating Xcode project…"
 xcodegen generate >/dev/null
 ok "project generated"
 
+# v1.2.5: prefer a real code-signing identity over ad-hoc. macOS' app
+# firewall keys its allow-list on a *stable* Designated Requirement; an
+# ad-hoc signature has none, so each rebuild looks like a new app and the
+# firewall (esp. with stealth mode) silently RSTs inbound connections —
+# which kills the pairing handshake. If the user has an Apple Development
+# / Developer ID identity, automatic signing with the project's team
+# gives that stable DR. Otherwise fall back to ad-hoc (CI, or a Mac not
+# signed into Xcode).
+TEAM_ID="G992TM2MX7"
+SIGN_ARGS=( CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual )
+if security find-identity -v -p codesigning 2>/dev/null \
+        | grep -qE "Developer ID Application:|Apple Development:"; then
+    ok "found a code-signing identity — building a properly-signed binary (team $TEAM_ID)"
+    SIGN_ARGS=( -allowProvisioningUpdates CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TEAM_ID" )
+else
+    warn "no code-signing identity available — building ad-hoc (macOS firewall may keep re-prompting/blocking; see README troubleshooting)"
+fi
+
 say "Building Universal Release (arm64 + x86_64) — this may take ~60s on first run"
 DERIVED="$REPO_ROOT/.build/release-DD"
 xcodebuild \
@@ -155,6 +173,7 @@ xcodebuild \
     -configuration Release \
     -destination 'generic/platform=macOS' \
     -derivedDataPath "$DERIVED" \
+    "${SIGN_ARGS[@]}" \
     ARCHS="arm64 x86_64" \
     ONLY_ACTIVE_ARCH=NO \
     clean build \

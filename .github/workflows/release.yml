@@ -19,6 +19,14 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
 
+    # Job-level env so the `if:` conditions on the optional signing steps
+    # can actually see whether the secrets are configured. (An env var
+    # defined only inside a step's `env:` block is NOT visible to that
+    # step's own `if:` expression — it must be set at job/workflow level.)
+    env:
+      CODESIGN_IDENTITY_NAME: ${{ secrets.CODESIGN_IDENTITY_NAME }}
+      NOTARY_APPLE_ID:        ${{ secrets.NOTARY_APPLE_ID }}
+
     steps:
       - name: Resolve tag
         id: tag
