@@ -270,7 +270,8 @@ Mac A의 사용자가 ④에서 "Pair" 클릭하면, **Mac B의 메뉴바 popove
 | 증상 | 어디서 보이나 | 해결 |
 |------|--------------|------|
 | 메뉴바 안테나 아이콘이 없음 | 메뉴바 우상단 | LSUIElement 앱이라 Dock 없음. 다른 메뉴바 아이콘에 가려졌으면 ⌘드래그로 위치 조정 |
-| "Searching for peer..." 무한 | 메뉴바 popover 상단 | (1) 양쪽 Mac이 같은 Wi-Fi인지 확인 (2) 회사/카페 Wi-Fi는 mDNS 차단 가능 (3) 양쪽 Mac이 메뉴바에 등장한 상태인지 확인 |
+| "Searching for peer..." 무한 | 메뉴바 popover 상단 | (1) 양쪽 Mac이 같은 Wi-Fi인지 확인 (2) 회사/카페 Wi-Fi는 mDNS 차단 가능 (3) 양쪽 Mac이 메뉴바에 등장한 상태인지 확인 (4) **양쪽** 시스템 설정 → 개인정보 보호 및 보안 → **로컬 네트워크** → ClaudeSync ON (앱이 ad-hoc 서명이라 업데이트할 때마다 권한이 초기화될 수 있음) |
+| "Pairing failed: connection to peer lost" | Onboarding 윈도우 / 메뉴바 banner | **macOS 방화벽**이 ClaudeSync 인바운드를 차단해서 연결이 establish 직후 끊김. ① 빠른 검증: **양쪽 Mac** 시스템 설정 → 네트워크 → 방화벽 OFF → 재시도 ② 다시 켜되 "옵션…"에서 ClaudeSync = "들어오는 연결 허용", "모든 들어오는 연결 차단"·스텔스 모드 OFF. ⚠️ ClaudeSync는 ad-hoc 서명이라 macOS 방화벽이 매 빌드를 새 앱으로 봐서 허용이 안 붙거나 매번 다시 물어볼 수 있음 — 항구적으로 풀려면 본인 Apple Developer 인증서로 서명 필요 |
 | "Failed: rsync exit=255" | 메뉴바 popover의 Recent Activity | 양쪽 Mac에서 시스템 설정 → 일반 → 공유 → "원격 로그인" ON 확인 |
 | "Failed: peer clock skew Ns" | Onboarding 윈도우 또는 메뉴바 banner | 두 Mac의 시각 차이 30초 초과. **양쪽 Mac**에서 시스템 설정 → 일반 → 날짜 및 시간 → "자동으로 시간 설정" 켜기 |
 | "another instance is already running" | 터미널 (install.sh 재실행 시) | `killall ClaudeSync` 후 `bash scripts/install.sh` 다시 |
