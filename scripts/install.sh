@@ -148,24 +148,6 @@ say "Generating Xcode project…"
 xcodegen generate >/dev/null
 ok "project generated"
 
-# v1.2.5: prefer a real code-signing identity over ad-hoc. macOS' app
-# firewall keys its allow-list on a *stable* Designated Requirement; an
-# ad-hoc signature has none, so each rebuild looks like a new app and the
-# firewall (esp. with stealth mode) silently RSTs inbound connections —
-# which kills the pairing handshake. If the user has an Apple Development
-# / Developer ID identity, automatic signing with the project's team
-# gives that stable DR. Otherwise fall back to ad-hoc (CI, or a Mac not
-# signed into Xcode).
-TEAM_ID="G992TM2MX7"
-SIGN_ARGS=( CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual )
-if security find-identity -v -p codesigning 2>/dev/null \
-        | grep -qE "Developer ID Application:|Apple Development:"; then
-    ok "found a code-signing identity — building a properly-signed binary (team $TEAM_ID)"
-    SIGN_ARGS=( -allowProvisioningUpdates CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TEAM_ID" )
-else
-    warn "no code-signing identity available — building ad-hoc (macOS firewall may keep re-prompting/blocking; see README troubleshooting)"
-fi
-
 say "Building Universal Release (arm64 + x86_64) — this may take ~60s on first run"
 DERIVED="$REPO_ROOT/.build/release-DD"
 xcodebuild \
@@ -173,7 +155,6 @@ xcodebuild \
     -configuration Release \
     -destination 'generic/platform=macOS' \
     -derivedDataPath "$DERIVED" \
-    "${SIGN_ARGS[@]}" \
     ARCHS="arm64 x86_64" \
     ONLY_ACTIVE_ARCH=NO \
     clean build \
@@ -188,6 +169,33 @@ if [[ ! -d "$APP_BUILT" ]]; then
     exit 1
 fi
 ok "built $APP_BUILT"
+
+# v1.2.6: re-sign with a real identity if one is available. macOS' app
+# firewall keys its allow-list on the app's *stable Designated
+# Requirement* — an ad-hoc signature (the xcodebuild default here, kept
+# so CI without certs still builds) has none, so every rebuild looks
+# like a new app and the firewall (esp. with stealth mode) silently RSTs
+# inbound connections, which kills the pairing handshake. Replacing the
+# ad-hoc sig with an Apple Development / Developer ID one gives that
+# stable DR. (Post-build `codesign --force` avoids the build-setting
+# conflicts you hit trying to flip the project to automatic signing.)
+SIGN_HASH=$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep -E "Developer ID Application:|Apple Development:" | head -1 \
+    | awk '{print $2}')
+if [[ -n "$SIGN_HASH" ]]; then
+    say "re-signing with identity $SIGN_HASH (stable Designated Requirement → macOS firewall recognises the app across updates)"
+    if codesign --force --options runtime \
+            --entitlements "$REPO_ROOT/ClaudeSync/Resources/ClaudeSync.entitlements" \
+            --sign "$SIGN_HASH" \
+            "$APP_BUILT" >/dev/null 2>&1 \
+        && codesign --verify --strict "$APP_BUILT" >/dev/null 2>&1; then
+        ok "signed ($(codesign -dvv "$APP_BUILT" 2>&1 | sed -n 's/^Authority=//p' | head -1))"
+    else
+        warn "re-sign failed — app remains ad-hoc (the macOS firewall may keep prompting/blocking; allow ClaudeSync in System Settings → Network → Firewall → Options)"
+    fi
+else
+    warn "no code-signing identity found — app is ad-hoc (the macOS firewall may keep prompting/blocking; see README troubleshooting / docs/specs/SIGNING.md)"
+fi
 
 # ─── 3) install to /Applications ─────────────────────────────────────
 DEST="/Applications/ClaudeSync.app"
