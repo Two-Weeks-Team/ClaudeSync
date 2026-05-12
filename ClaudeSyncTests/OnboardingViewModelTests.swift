@@ -122,4 +122,38 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(vm.step, .welcome)
         XCTAssertNil(vm.lastError)
     }
+
+    @MainActor
+    func testRetryPairing_fromFailedPairingCode_returnsToDiscovery() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let vm = OnboardingViewModel(
+            preflight: RemoteLoginPreflight(checker: MockSSHConnectivityChecker(default: .ok)),
+            fdaChecker: FullDiskAccessChecker(canaryURL: tmp)
+        )
+        vm.advanceFromWelcome()
+        await vm.runRemoteLoginCheck()
+        vm.advanceFromRemoteLogin()
+        vm.runFullDiskAccessCheck()
+        vm.advanceFromFullDiskAccess()
+        XCTAssertEqual(vm.step, .discovery)
+
+        vm.discoveryFoundPeer()                                  // → .pairingCode(.idle)
+        vm.updatePairingState(.failed(message: "connection to peer lost"))
+        guard case .pairingCode(.failed) = vm.step else {
+            return XCTFail("expected .pairingCode(.failed), got \(vm.step)")
+        }
+        vm.retryPairing()
+        XCTAssertEqual(vm.step, .discovery, "retry should bounce back to discovery so the user can re-Pair")
+    }
+
+    @MainActor
+    func testRetryPairing_isNoOpOutsidePairingCode() {
+        let vm = OnboardingViewModel()
+        vm.retryPairing()
+        XCTAssertEqual(vm.step, .welcome)
+    }
 }

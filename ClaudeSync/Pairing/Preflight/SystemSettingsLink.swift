@@ -20,4 +20,14 @@ public enum SystemSettingsLink {
     public static let localNetwork: URL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork"
     )!
+
+    /// Network > Firewall. macOS' application firewall (especially with
+    /// "Block all incoming connections" or stealth mode on) silently RSTs
+    /// inbound connections to apps that aren't on the allow-list — which
+    /// kills ClaudeSync's pairing handshake the moment it's established.
+    /// The Firewall pane moved under Network in Ventura+; this deep-link
+    /// opens that pane (older builds redirect from the Security pane).
+    public static let firewall: URL = URL(
+        string: "x-apple.systempreferences:com.apple.Network-Settings.extension?Firewall"
+    )!
 }

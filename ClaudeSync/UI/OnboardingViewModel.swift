@@ -111,6 +111,27 @@ public final class OnboardingViewModel {
     public func openSystemSettingsForFullDiskAccess() {
         NSWorkspace.shared.open(SystemSettingsLink.fullDiskAccess)
     }
+
+    public func openSystemSettingsForLocalNetwork() {
+        NSWorkspace.shared.open(SystemSettingsLink.localNetwork)
+    }
+
+    public func openSystemSettingsForFirewall() {
+        NSWorkspace.shared.open(SystemSettingsLink.firewall)
+    }
+
+    // MARK: - Pairing retry
+
+    /// After a failed/rejected pairing the AppEnvironment has torn down the
+    /// PairingManager; bounce the wizard back to the discovery step so the
+    /// user can pick the peer and hit "Pair" again without restarting the
+    /// whole onboarding flow.
+    public func retryPairing() {
+        switch step {
+        case .pairingCode: step = .discovery
+        default: break
+        }
+    }
 }
 
 // AppKit import for NSWorkspace
