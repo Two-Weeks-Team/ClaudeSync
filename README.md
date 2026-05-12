@@ -118,6 +118,16 @@ curl -fsSL https://raw.githubusercontent.com/Two-Weeks-Team/ClaudeSync/main/scri
 
 빌드 + 설치 + launch까지 **총 1~2분**. 양쪽이 동시에 실행되어도 무방.
 
+> **이미 이 리포를 `git clone`해 둔 Mac이라면** — web installer 대신 클론 디렉터리에서
+> 한 줄이면 됩니다 (양쪽 Mac의 버전을 최신 커밋으로 맞추고 재설치 → 자동 페어링 가능):
+>
+> ```bash
+> cd ClaudeSync && bash scripts/update.sh
+> ```
+>
+> `update.sh` = `git pull --ff-only` → `killall ClaudeSync` → `scripts/install.sh` → iCloud Drive 상태 점검.
+> 두 Mac 모두에서 한 번씩 실행하세요.
+
 설치 완료 후 양쪽 Mac의 화면 우측 상단 메뉴바에 안테나 아이콘이 등장합니다.
 
 ```
@@ -351,7 +361,7 @@ ClaudeSync/
 └── Resources/          — Info.plist + entitlements + AppIcon
 
 ClaudeSyncTests/        — 26 스위트 / 214 테스트
-scripts/                — install / web-install / release-build / measure-footprint / package
+scripts/                — install / update / web-install / release-build / measure-footprint / package
 docs/
 ├── prd/                — PRD
 ├── specs/              — Technical spec, Test strategy
