@@ -100,6 +100,16 @@ public actor PairingManager {
     /// pairRequest. Repeated attempts from the same channel are dropped to
     /// prevent brute force iteration over the 1M code space.
     public static let maxPairRequestsPerSession: Int = 1
+    /// v1.2.2: interval between control-plane heartbeats sent while a
+    /// handshake is live. The visual-code step is user-paced — a person
+    /// comparing six digits can take tens of seconds — so the connection
+    /// must survive an arbitrarily long quiet period. A small steady
+    /// trickle of traffic keeps the NWConnection alive across NAT idle
+    /// timeouts and macOS App Nap throttling, and turns a genuinely dead
+    /// peer into a prompt `.failed` instead of an indefinite "Step 3" hang.
+    /// (Apple guidance: TCP has no keepalive unless you build one; a dead
+    /// connection is only observed when an operation fails.)
+    public static let heartbeatInterval: Duration = .seconds(5)
 
     // MARK: - Dependencies
 
@@ -107,11 +117,15 @@ public actor PairingManager {
     private let sshKeys: SSHKeyManager
     private let identity: LocalIdentity
     private let logger = AppLogger.shared
+    /// Per-instance copy of ``heartbeatInterval`` so tests can dial it down.
+    private let heartbeatInterval: Duration
 
     // MARK: - State
 
     public private(set) var state: State = .idle
     private var listeningTask: Task<Void, Never>?
+    /// v1.2.2: periodic keepalive, runs from `start()` until a terminal state.
+    private var heartbeatTask: Task<Void, Never>?
     private var eventContinuation: AsyncStream<Event>.Continuation?
     private var localPubkeyBytes: Data?
     private var localPubkeyLine: String?
@@ -126,10 +140,12 @@ public actor PairingManager {
 
     // MARK: - Init
 
-    public init(channel: PeerChannel, sshKeys: SSHKeyManager, identity: LocalIdentity) {
+    public init(channel: PeerChannel, sshKeys: SSHKeyManager, identity: LocalIdentity,
+                heartbeatInterval: Duration = PairingManager.heartbeatInterval) {
         self.channel = channel
         self.sshKeys = sshKeys
         self.identity = identity
+        self.heartbeatInterval = heartbeatInterval
     }
 
     // MARK: - Public API
@@ -149,6 +165,41 @@ public actor PairingManager {
                 guard let self else { break }
                 await self.handle(message: msg)
             }
+        }
+
+        // v1.2.2: keep the control channel warm for the duration of the
+        // handshake. Stops itself once a terminal state is reached (see
+        // `transition(to:)`) or once the channel is gone.
+        guard heartbeatTask == nil else { return }
+        let interval = heartbeatInterval
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                if Task.isCancelled { break }
+                guard let self else { break }
+                if await self.heartbeatTick() { break }
+            }
+        }
+    }
+
+    /// One keepalive cycle. Returns `true` when the loop should stop:
+    /// either we've reached a terminal state, or the transport is gone (in
+    /// which case we surface a clean `.failed` so the UI stops waiting on a
+    /// connection that can never deliver `pairAccept` / `pairConfirm`).
+    private func heartbeatTick() async -> Bool {
+        if state.isTerminal { return true }
+        do {
+            try await channel.send(.heartbeat(timestamp: Date()))
+            return false
+        } catch {
+            if state != .idle, !state.isTerminal {
+                logger.warning("pairing heartbeat failed (\(error)) — connection lost",
+                               category: "pairing")
+                await transition(to: .failed(
+                    message: "connection to peer lost — please try pairing again"
+                ))
+            }
+            return true
         }
     }
 
@@ -178,7 +229,8 @@ public actor PairingManager {
         do {
             try await channel.send(.pairRequest(payload))
         } catch {
-            await transition(to: .failed(message: "send pairRequest failed: \(error)"))
+            logger.warning("send pairRequest failed: \(error)", category: "pairing")
+            await transition(to: .failed(message: "connection lost before sending pair request — please try pairing again"))
             throw PairingError.sendFailed(String(describing: error))
         }
         await transition(to: .sentPairRequest)
@@ -216,7 +268,8 @@ public actor PairingManager {
         do {
             try await channel.send(.pairAccept(payload))
         } catch {
-            await transition(to: .failed(message: "send pairAccept failed: \(error)"))
+            logger.warning("send pairAccept failed: \(error)", category: "pairing")
+            await transition(to: .failed(message: "connection to peer lost — please try pairing again"))
             throw PairingError.sendFailed(String(describing: error))
         }
         await transition(to: .sentPairAccept(req, code: code))
@@ -242,7 +295,8 @@ public actor PairingManager {
         } catch {
             // Best effort: roll back the just-installed key.
             try? await sshKeys.removePeerKey(matchingComment: "claudesync@\(accept.hostname)")
-            await transition(to: .failed(message: "send pairConfirm failed: \(error)"))
+            logger.warning("send pairConfirm failed: \(error)", category: "pairing")
+            await transition(to: .failed(message: "connection to peer lost — please try pairing again"))
             throw PairingError.sendFailed(String(describing: error))
         }
 
@@ -291,6 +345,8 @@ public actor PairingManager {
     public func cancel() async {
         listeningTask?.cancel()
         listeningTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         eventContinuation?.finish()
         eventContinuation = nil
         await channel.close()
@@ -435,6 +491,10 @@ public actor PairingManager {
 
     private func transition(to newState: State) async {
         state = newState
+        if newState.isTerminal {
+            heartbeatTask?.cancel()
+            heartbeatTask = nil
+        }
         eventContinuation?.yield(.stateChanged(newState))
     }
 
