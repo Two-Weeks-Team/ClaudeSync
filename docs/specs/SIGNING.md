@@ -12,7 +12,7 @@ There are two scopes:
 
 | Build | Who runs it | Signing | Fixes |
 |-------|-------------|---------|-------|
-| `scripts/install.sh` (source build) | the user, on a Mac with Xcode + their Apple ID | **Apple Development** (automatic, team `G992TM2MX7`) — done automatically by `install.sh` when a code-signing identity is present | the firewall / Local Network / TCC churn on **that Mac** |
+| `scripts/install.sh` (source build) | the user, on a Mac with Xcode + their Apple ID | **Apple Development** — `install.sh` builds ad-hoc, then `codesign --force --options runtime --sign <identity>` re-signs with the first Apple Development / Developer ID identity from `security find-identity` (post-build re-sign avoids xcodebuild build-setting conflicts). No-op when no identity is present (CI, or a Mac not signed into Xcode). | the firewall / Local Network / TCC churn on **that Mac** |
 | `scripts/package.sh` → DMG (in `release.yml` on a `v*` tag) | GitHub Actions | **Developer ID Application** + **notarization** — only when the repo secrets below are set; otherwise ad-hoc | the DMG that anyone (incl. the user's other Mac that has no Xcode) downloads — Gatekeeper-trusted, stable DR |
 
 `install.sh` needs nothing extra — it detects an available identity via
