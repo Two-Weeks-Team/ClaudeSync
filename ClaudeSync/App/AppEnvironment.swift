@@ -73,6 +73,16 @@ final class AppEnvironment {
     /// and Confirm IF the peer's actual fingerprint matches this value
     /// (defense-in-depth — keychain match could in theory be stale).
     private var autoPairExpectedFingerprint: String?
+    /// v1.2.2: a `ProcessInfo` activity assertion held for the lifetime of
+    /// an active pairing. ClaudeSync is a menu-bar-only (`LSUIElement`)
+    /// app, so once the popover closes it has no visible window and macOS
+    /// App Nap will throttle its run loop / dispatch queues — which can
+    /// silently stall the control-channel `NWConnection` mid-handshake.
+    /// `beginActivity(.userInitiated)` keeps the process scheduled (and
+    /// disables sudden termination) while a pairing is in flight; released
+    /// the moment it completes or fails. (Apple Energy Efficiency Guide:
+    /// wrap user-initiated async work in `beginActivity`/`endActivity`.)
+    private var pairingActivityToken: NSObjectProtocol?
     /// v1.1 (RCA-M5/M6/M7): observes Wi-Fi flaps + sleep/wake and triggers
     /// discovery restart with a small backoff so we don't thrash sshd or
     /// mDNSResponder.
@@ -538,7 +548,26 @@ final class AppEnvironment {
         let manager = PairingManager(channel: channel, sshKeys: sshKeys, identity: identity)
         activePairing = manager
         activeChannel = channel
+        beginPairingActivity()
         return manager
+    }
+
+    /// v1.2.2: pin the process active for the duration of a pairing so App
+    /// Nap can't throttle the menu-bar app while the control channel is
+    /// mid-handshake. Idempotent.
+    private func beginPairingActivity() {
+        guard pairingActivityToken == nil else { return }
+        pairingActivityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "ClaudeSync pairing handshake in progress"
+        )
+    }
+
+    private func endPairingActivity() {
+        if let token = pairingActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            pairingActivityToken = nil
+        }
     }
 
     private func beginPairingObservation(manager: PairingManager) async {
@@ -638,6 +667,7 @@ final class AppEnvironment {
         }())
         overallStatus = .connected
         needsOnboarding = false
+        endPairingActivity()
         logger.info("Paired with \(paired.hostname) — sync engine peer wired",
                     category: "pairing")
     }
@@ -657,6 +687,7 @@ final class AppEnvironment {
         if let ch = activeChannel { await ch.close() }
         activeChannel = nil
         activePairing = nil
+        endPairingActivity()
         // v1.2: clear the auto-pair sentinel so the next handshake
         // starts cleanly.
         autoPairExpectedFingerprint = nil

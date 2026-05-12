@@ -94,9 +94,7 @@ public actor PeerDiscoveryActor {
     public func startAdvertising(paired: Bool = false) async throws {
         guard listener == nil else { throw PeerDiscoveryError.alreadyRunning }
 
-        let tcpOptions = NWProtocolTCP.Options()
-        tcpOptions.connectionTimeout = 10
-        tcpOptions.enableKeepalive = true
+        let tcpOptions = Self.tunedTCPOptions()
 
         // v1.1 (SEC-002): if a TLS factory is configured, layer TLS over
         // the TCP transport. Listener side uses no pin (responder accepts
@@ -208,7 +206,11 @@ public actor PeerDiscoveryActor {
             throw PeerDiscoveryError.noEndpointForPeer(peer.machineId)
         }
         let tlsOptions = await tlsOptionsOrFallback(pinnedFingerprint: pinnedFingerprint)
-        let parameters = NWParameters(tls: tlsOptions, tcp: NWProtocolTCP.Options())
+        // v1.2.2: the outbound side used default TCP options — no keepalive
+        // — so a quiet established connection (e.g. waiting on the user to
+        // confirm the 6-digit code) could be reaped by a NAT/router idle
+        // timeout. Match the listener's tuned options on both ends.
+        let parameters = NWParameters(tls: tlsOptions, tcp: Self.tunedTCPOptions())
         parameters.includePeerToPeer = true
         let framerOptions = NWProtocolFramer.Options(
             definition: ClaudeSyncProtocolFramer.definition
@@ -217,6 +219,20 @@ public actor PeerDiscoveryActor {
 
         let conn = NWConnection(to: endpoint, using: parameters)
         return NWConnectionPeerChannel(connection: conn)
+    }
+
+    /// Shared TCP options for both the listener and outbound connections:
+    /// a 10 s connect timeout plus aggressive keepalive so a half-open or
+    /// idle connection is detected (and refreshed) within ~25 s rather
+    /// than the kernel default of several minutes.
+    static func tunedTCPOptions() -> NWProtocolTCP.Options {
+        let opts = NWProtocolTCP.Options()
+        opts.connectionTimeout = 10
+        opts.enableKeepalive = true
+        opts.keepaliveIdle = 10
+        opts.keepaliveInterval = 5
+        opts.keepaliveCount = 3
+        return opts
     }
 
     // MARK: - Internals
