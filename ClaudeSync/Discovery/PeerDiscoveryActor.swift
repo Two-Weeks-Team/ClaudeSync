@@ -27,6 +27,17 @@ public actor PeerDiscoveryActor {
     public static let serviceType = "_claudesync._tcp"
     public static let serviceDomain = "local."
 
+    /// v1.2.4: ClaudeSync pairs two Macs **on the same Wi-Fi / LAN**, so we
+    /// only need infrastructure-network Bonjour. Setting `includePeerToPeer`
+    /// = true additionally opts into peer-to-peer Wi-Fi (AWDL), which Apple
+    /// warns "can impact network performance" — in practice AWDL links are
+    /// flaky: the radio periodically changes channels for AWDL polling, and
+    /// an established connection that happened to be routed over AWDL can be
+    /// dropped within seconds. Keeping this `false` forces the stable
+    /// infrastructure path. (If a future use case needs cross-network
+    /// discovery, flip this back on for the listener+browser only.)
+    static let usePeerToPeerWiFi = false
+
     private let identity: PairingManager.LocalIdentity
     private let publicKeyFingerprint: String?
     private let logger = AppLogger.shared
@@ -104,7 +115,7 @@ public actor PeerDiscoveryActor {
         // discovery setup.
         let tlsOptions = await tlsOptionsOrFallback(pinnedFingerprint: nil)
         let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
-        parameters.includePeerToPeer = true
+        parameters.includePeerToPeer = Self.usePeerToPeerWiFi
 
         let framerOptions = NWProtocolFramer.Options(
             definition: ClaudeSyncProtocolFramer.definition
@@ -167,7 +178,7 @@ public actor PeerDiscoveryActor {
             type: Self.serviceType, domain: Self.serviceDomain
         )
         let parameters = NWParameters()
-        parameters.includePeerToPeer = true
+        parameters.includePeerToPeer = Self.usePeerToPeerWiFi
 
         let browser = NWBrowser(for: descriptor, using: parameters)
 
@@ -211,7 +222,7 @@ public actor PeerDiscoveryActor {
         // confirm the 6-digit code) could be reaped by a NAT/router idle
         // timeout. Match the listener's tuned options on both ends.
         let parameters = NWParameters(tls: tlsOptions, tcp: Self.tunedTCPOptions())
-        parameters.includePeerToPeer = true
+        parameters.includePeerToPeer = Self.usePeerToPeerWiFi
         let framerOptions = NWProtocolFramer.Options(
             definition: ClaudeSyncProtocolFramer.definition
         )
