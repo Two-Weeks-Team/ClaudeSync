@@ -349,7 +349,7 @@ public actor PairingManager {
         heartbeatTask = nil
         eventContinuation?.finish()
         eventContinuation = nil
-        await channel.close()
+        await channel.close(reason: "PairingManager.cancel()")
     }
 
     // MARK: - Incoming dispatch
@@ -490,12 +490,26 @@ public actor PairingManager {
     // MARK: - State transition helper
 
     private func transition(to newState: State) async {
+        logger.info("pairing state → \(describeState(newState))", category: "pairing")
         state = newState
         if newState.isTerminal {
             heartbeatTask?.cancel()
             heartbeatTask = nil
         }
         eventContinuation?.yield(.stateChanged(newState))
+    }
+
+    private func describeState(_ s: State) -> String {
+        switch s {
+        case .idle: return "idle"
+        case .sentPairRequest: return "sentPairRequest"
+        case .receivedPairAccept(_, let c): return "receivedPairAccept(code=\(c))"
+        case .receivedPairRequest(_, let c): return "receivedPairRequest(code=\(c))"
+        case .sentPairAccept(_, let c): return "sentPairAccept(code=\(c))"
+        case .completed(let p): return "completed(\(p.hostname))"
+        case .rejected(let r): return "rejected(\(r))"
+        case .failed(let m): return "failed(\(m))"
+        }
     }
 
     private func clearEventContinuation() {
