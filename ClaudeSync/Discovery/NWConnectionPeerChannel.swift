@@ -143,10 +143,15 @@ public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
                 return
             }
 
-            if isComplete {
-                Task { await self.close(reason: "peer closed the connection (receive isComplete)") }
-                return
-            }
+            // v1.2.13: do NOT close on `isComplete`. With NWProtocolFramer,
+            // `isComplete: true` marks per-MESSAGE boundaries (set by our
+            // framer's `deliverInputNoCopy(isComplete: true)` for every
+            // length-prefixed frame), NOT connection-level FIN. Treating it
+            // as FIN closed the channel after the first framed message —
+            // which is exactly the pairRequest — surfacing as Air's
+            // "send pairAccept failed: closed" right after `receivedPairRequest`.
+            // Real connection close arrives via stateUpdateHandler .cancelled
+            // or .failed, which is already handled in startStateMonitoring.
 
             self.scheduleReceive()
         }
