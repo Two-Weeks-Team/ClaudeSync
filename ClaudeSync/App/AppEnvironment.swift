@@ -78,6 +78,15 @@ final class AppEnvironment {
     /// (both sides clicked Pair) deterministically without closing each
     /// other's outbound. See `acceptIncomingPairing` for the tiebreaker.
     private var activePairingTargetMachineId: UUID?
+
+    /// v1.2.12: dev/CI smoke-test toggle (env var `CLAUDESYNC_TEST_AUTO_PAIR=1`).
+    /// When on, the pairing observer auto-accepts every inbound pairRequest
+    /// and auto-confirms every pairAccept WITHOUT comparing the visual
+    /// 6-digit code. Pair with `claudesync://pair?id=<machineId>` to
+    /// initiate. Never enable in production — bypasses the human
+    /// confirmation step that protects against a rogue peer on the LAN.
+    static let testAutoPairMode: Bool =
+        ProcessInfo.processInfo.environment["CLAUDESYNC_TEST_AUTO_PAIR"] == "1"
     /// v1.2.2: a `ProcessInfo` activity assertion held for the lifetime of
     /// an active pairing. ClaudeSync is a menu-bar-only (`LSUIElement`)
     /// app, so once the popover closes it has no visible window and macOS
@@ -479,6 +488,36 @@ final class AppEnvironment {
         try await manager.initiate()
     }
 
+    /// v1.2.12: dev/CI URL-scheme trigger:
+    ///   open "claudesync://pair?id=<peer-machineId-uuid>"
+    /// Resolves the machineId against `discoveredPeers` and starts pairing.
+    /// Combined with `CLAUDESYNC_TEST_AUTO_PAIR=1` on both Macs the
+    /// handshake completes without any GUI click — for end-to-end smoke
+    /// tests. No-op when the URL is malformed or the peer isn't visible.
+    func handleTestPairURL(_ url: URL) async {
+        guard url.scheme == "claudesync", url.host == "pair" else {
+            logger.warning("ignoring URL with unexpected scheme/host: \(url)", category: "pairing")
+            return
+        }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        guard let idStr = comps?.queryItems?.first(where: { $0.name == "id" })?.value,
+              let machineId = UUID(uuidString: idStr) else {
+            logger.warning("claudesync://pair URL missing or malformed id=<UUID>: \(url)",
+                           category: "pairing")
+            return
+        }
+        guard let peer = discoveredPeers.first(where: { $0.machineId == machineId }) else {
+            logger.warning("claudesync://pair: peer \(idStr) not in discoveredPeers (have \(discoveredPeers.count))",
+                           category: "pairing")
+            return
+        }
+        do {
+            try await initiatePairing(with: peer)
+        } catch {
+            logger.warning("claudesync://pair initiate threw: \(error)", category: "pairing")
+        }
+    }
+
     /// Responder entry point — an inbound NWConnection arrived from a peer.
     private func acceptIncomingPairing(channel: PeerChannel) async {
         if activePairing != nil {
@@ -625,22 +664,33 @@ final class AppEnvironment {
                     // auto-click Accept (responder) and Confirm
                     // (initiator) when the peer's fingerprint matches
                     // what was published to iCloud Keychain.
-                    if let expectedFP = self.autoPairExpectedFingerprint {
-                        switch newState {
-                        case .receivedPairRequest(let req, _):
-                            if req.publicKeyFingerprint == expectedFP {
-                                self.logger.info("Auto-Accept (iCloud match)",
-                                                 category: "icloud-pair")
-                                await self.acceptPendingPairing()
-                            }
-                        case .receivedPairAccept(let accept, _):
-                            if accept.publicKeyFingerprint == expectedFP {
-                                self.logger.info("Auto-Confirm (iCloud match)",
-                                                 category: "icloud-pair")
-                                await self.confirmPairingCode()
-                            }
-                        default: break
+                    //
+                    // v1.2.12: ALSO auto-accept/confirm when launched with
+                    // `CLAUDESYNC_TEST_AUTO_PAIR=1` (dev/CI smoke test —
+                    // bypasses the visual code; never enable in production).
+                    let expectedFP = self.autoPairExpectedFingerprint
+                    switch newState {
+                    case .receivedPairRequest(let req, _):
+                        if AppEnvironment.testAutoPairMode {
+                            self.logger.info("Auto-Accept (CLAUDESYNC_TEST_AUTO_PAIR=1)",
+                                             category: "pairing")
+                            await self.acceptPendingPairing()
+                        } else if let fp = expectedFP, req.publicKeyFingerprint == fp {
+                            self.logger.info("Auto-Accept (iCloud match)",
+                                             category: "icloud-pair")
+                            await self.acceptPendingPairing()
                         }
+                    case .receivedPairAccept(let accept, _):
+                        if AppEnvironment.testAutoPairMode {
+                            self.logger.info("Auto-Confirm (CLAUDESYNC_TEST_AUTO_PAIR=1)",
+                                             category: "pairing")
+                            await self.confirmPairingCode()
+                        } else if let fp = expectedFP, accept.publicKeyFingerprint == fp {
+                            self.logger.info("Auto-Confirm (iCloud match)",
+                                             category: "icloud-pair")
+                            await self.confirmPairingCode()
+                        }
+                    default: break
                     }
 
                     if case .completed(let paired) = newState {

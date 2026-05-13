@@ -21,6 +21,17 @@ struct ClaudeSyncApp: App {
         WindowGroup("Onboarding", id: "onboarding") {
             FirstLaunchPairingView()
                 .environment(environment)
+                .onOpenURL { url in
+                    // v1.2.12: dev/test trigger — e.g.
+                    //   open "claudesync://pair?id=816DE4E7-…"
+                    // initiates pairing with the peer of that machineId,
+                    // bypassing GUI clicks. Auto-accept on the other side
+                    // requires `CLAUDESYNC_TEST_AUTO_PAIR=1` env var
+                    // (see AppEnvironment.testAutoPairMode).
+                    Task { @MainActor in
+                        await environment.handleTestPairURL(url)
+                    }
+                }
         }
         .windowResizability(.contentSize)
 
