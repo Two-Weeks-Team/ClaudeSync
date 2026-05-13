@@ -44,9 +44,9 @@ DMG_PATH="$DIST_DIR/$DMG_NAME"
 #    SHA-1 hash to `codesign --sign` so the name is unambiguous.
 if [[ -z "${CODESIGN_IDENTITY:-}" ]]; then
     CODESIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
-        | grep "Developer ID Application:" | head -1 | awk '{print $2}')
+        | grep "Developer ID Application:" | head -1 | awk '{print $2}' || true)
     [[ -z "$CODESIGN_IDENTITY" ]] && CODESIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
-        | grep "Apple Development:" | head -1 | awk '{print $2}')
+        | grep "Apple Development:" | head -1 | awk '{print $2}' || true)
 fi
 if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
     echo ""

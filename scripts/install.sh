@@ -181,7 +181,7 @@ ok "built $APP_BUILT"
 # conflicts you hit trying to flip the project to automatic signing.)
 SIGN_HASH=$(security find-identity -v -p codesigning 2>/dev/null \
     | grep -E "Developer ID Application:|Apple Development:" | head -1 \
-    | awk '{print $2}')
+    | awk '{print $2}' || true)
 if [[ -n "$SIGN_HASH" ]]; then
     say "re-signing with identity $SIGN_HASH (stable Designated Requirement → macOS firewall recognises the app across updates)"
     if codesign --force --options runtime \
