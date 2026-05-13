@@ -73,6 +73,11 @@ final class AppEnvironment {
     /// and Confirm IF the peer's actual fingerprint matches this value
     /// (defense-in-depth — keychain match could in theory be stale).
     private var autoPairExpectedFingerprint: String?
+    /// v1.2.11: machineId of the peer we are currently *initiating* to.
+    /// Used by `acceptIncomingPairing` to resolve the cross-initiate race
+    /// (both sides clicked Pair) deterministically without closing each
+    /// other's outbound. See `acceptIncomingPairing` for the tiebreaker.
+    private var activePairingTargetMachineId: UUID?
     /// v1.2.2: a `ProcessInfo` activity assertion held for the lifetime of
     /// an active pairing. ClaudeSync is a menu-bar-only (`LSUIElement`)
     /// app, so once the popover closes it has no visible window and macOS
@@ -467,6 +472,7 @@ final class AppEnvironment {
         }
         logger.info("initiating pairing with \(peer.hostname) (\(peer.machineId.uuidString.prefix(8)))",
                     category: "pairing")
+        activePairingTargetMachineId = peer.machineId
         let channel = try await discovery.connect(to: peer)
         let manager = makePairingManager(channel: channel)
         await beginPairingObservation(manager: manager)
@@ -475,12 +481,43 @@ final class AppEnvironment {
 
     /// Responder entry point — an inbound NWConnection arrived from a peer.
     private func acceptIncomingPairing(channel: PeerChannel) async {
-        guard activePairing == nil else {
-            // We're already mid-pairing; refuse this one cleanly.
-            logger.info("inbound pairing connection refused — already mid-pairing; closing it",
-                        category: "pairing")
-            await channel.close(reason: "inbound rejected — already have an active pairing")
-            return
+        if activePairing != nil {
+            // v1.2.11: cross-initiate race — both sides clicked Pair within a
+            // few hundred ms. Before, the second side's `acceptIncomingPairing`
+            // unconditionally closed the inbound, which `connection.cancel()`
+            // FIN-promoted to the *other* side — killing both outbounds.
+            // Resolve deterministically by machineId: the side with the smaller
+            // machineId keeps its outbound (acts as initiator), the side with
+            // the larger machineId aborts its outbound and accepts the inbound
+            // (acts as responder). Both sides apply the same comparison so
+            // exactly one connection survives.
+            let myId = AppEnvironment.persistentMachineId()
+            if let targetId = activePairingTargetMachineId {
+                if myId.uuidString < targetId.uuidString {
+                    // We win as initiator — close the inbound.
+                    logger.info("cross-initiate race: keeping our outbound to \(targetId.uuidString.prefix(8)) (myId<targetId); closing inbound",
+                                category: "pairing")
+                    await channel.close(reason: "cross-initiate race — outbound wins (myId<targetId)")
+                    return
+                } else {
+                    // We lose as initiator — abort our outbound, accept the
+                    // inbound as responder. tearDownActivePairing closes our
+                    // outbound channel (which is the OTHER side's listener-
+                    // accepted inbound — they'll close it too via this same
+                    // tiebreaker on their end, so the double-close is OK).
+                    logger.info("cross-initiate race: aborting our outbound to \(targetId.uuidString.prefix(8)) (myId>targetId); switching to responder on inbound",
+                                category: "pairing")
+                    await tearDownActivePairing()
+                    // fall through to accept the inbound below
+                }
+            } else {
+                // No target id (shouldn't happen — only if accepted from a
+                // non-initiate path). Preserve the old behaviour: close.
+                logger.info("inbound pairing connection refused — already mid-pairing (no target id); closing it",
+                            category: "pairing")
+                await channel.close(reason: "inbound rejected — already have an active pairing")
+                return
+            }
         }
         logger.info("inbound pairing connection accepted — waiting for pairRequest", category: "pairing")
         // v1.2: if auto-pair is enabled AND iCloud Keychain has any
@@ -693,6 +730,7 @@ final class AppEnvironment {
         if let ch = activeChannel { await ch.close(reason: "tearDownActivePairing") }
         activeChannel = nil
         activePairing = nil
+        activePairingTargetMachineId = nil
         endPairingActivity()
         // v1.2: clear the auto-pair sentinel so the next handshake
         // starts cleanly.
