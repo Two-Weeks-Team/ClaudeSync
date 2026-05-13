@@ -127,12 +127,38 @@ public struct RsyncCommandBuilder: Sendable {
 
         let localTrailing = ensureTrailingSlash(basePath)
         let remoteTrailing = ensureTrailingSlash(job.target.spec.basePath)
+        // v1.2.14: quote the *remote* path so its spaces survive ssh →
+        // remote shell → wrapper → rsync. macOS Sequoia's openrsync
+        // lacks `--protect-args` (which would pack args into rsync's
+        // own protocol stream), so the remote path is delivered through
+        // the remote shell — an unquoted `~/Library/Application
+        // Support/Claude/` becomes three args ("server receiver mode
+        // requires two argument" from openrsync). Single quotes solve
+        // the space split BUT also suppress tilde expansion — `'~/x'`
+        // creates a literal `~` directory on the remote. So keep the
+        // leading `~/` outside the quotes (so the shell still expands
+        // it) and single-quote the remainder. Reject any pre-existing
+        // single quote in the path to defang quote-injection — none of
+        // our target basePaths contain `'` but defence-in-depth.
+        let remoteEncoded: String = {
+            let safe = remoteTrailing.contains("'")
+                ? remoteTrailing.replacingOccurrences(of: "'", with: "'\\''")
+                : remoteTrailing
+            if safe.hasPrefix("~/") {
+                return "~/'\(safe.dropFirst(2))'"
+            }
+            if safe.hasPrefix("~") {
+                // bare ~  →  ~''  (single quotes around empty remainder)
+                return "~'\(safe.dropFirst(1))'"
+            }
+            return "'\(safe)'"
+        }()
         switch job.direction {
         case .push:
             args.append(localTrailing)
-            args.append("\(peer.sshAddress):\(remoteTrailing)")
+            args.append("\(peer.sshAddress):\(remoteEncoded)")
         case .pull:
-            args.append("\(peer.sshAddress):\(remoteTrailing)")
+            args.append("\(peer.sshAddress):\(remoteEncoded)")
             args.append(localTrailing)
         }
 

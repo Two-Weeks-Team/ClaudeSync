@@ -445,11 +445,18 @@ public actor SSHKeyManager {
     # 'rsync ' token). Use the first rsync we can find in either Homebrew's
     # path or the system path so this works on Sequoia (openrsync) and on
     # machines where the user installed GNU rsync via brew.
+    #
+    # v1.2.14: parse `rest` with `eval` so a path containing a backslash-
+    # escaped space (e.g. `~/Library/Application\ Support/Claude/`)
+    # arrives at rsync as ONE argument, not two. Earlier `exec $candidate
+    # $rest` did naive whitespace split, breaking any target with a
+    # space ("server receiver mode requires two argument"). The allowlist
+    # checks above already reject backticks / `$( )` / `;` / `|` / `&`
+    # / `<` / `>`, so eval here can't reach any unvetted construct.
     rest=${cmd#rsync }
     for candidate in /opt/homebrew/bin/rsync /usr/local/bin/rsync /usr/bin/rsync; do
         if [ -x "$candidate" ]; then
-            # shellcheck disable=SC2086
-            exec "$candidate" $rest
+            eval "exec \"\$candidate\" $rest"
         fi
     done
     echo "claudesync: no rsync binary found" >&2

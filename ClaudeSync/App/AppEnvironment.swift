@@ -253,6 +253,15 @@ final class AppEnvironment {
         isAutoStarted = true
         logger.info("Booting sync engine + discovery", category: "app")
 
+        // v1.2.14: refresh the rsync-server wrapper script every boot.
+        // Idempotent (overwrites only when the file differs from what we
+        // ship), so app upgrades propagate even when the user is already
+        // paired and never re-pairs. The v1.2.14 wrapper uses `eval` to
+        // preserve backslash-escaped spaces in remote paths (e.g.
+        // `~/Library/Application\ Support/Claude/`) which the previous
+        // unquoted `exec $rest` mangled into two arguments.
+        try? await sshKeys.installRsyncWrapperIfMissing()
+
         // v1.2: publish our own pairing record to iCloud Keychain so any
         // other Mac signed into the same Apple ID can find us. Failure
         // is non-fatal — graceful fallback to the v1.1 visual-code path.
