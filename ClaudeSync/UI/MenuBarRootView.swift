@@ -136,8 +136,13 @@ struct MenuBarRootView: View {
                 .font(.title2)
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("ClaudeSync")
-                    .font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("ClaudeSync")
+                        .font(.headline)
+                    Text(Self.appVersionString)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
                 Text(environment.overallStatus.shortLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -145,6 +150,14 @@ struct MenuBarRootView: View {
             Spacer()
         }
     }
+
+    /// "v1.2.8 (12)" — short version + build, read from the bundle Info.plist.
+    static let appVersionString: String = {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "v\(short) (\(build))"
+    }()
 
     private var statusRow: some View {
         VStack(alignment: .leading, spacing: 4) {
