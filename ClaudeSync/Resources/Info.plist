@@ -30,6 +30,17 @@
 	<array>
 		<string>_claudesync._tcp</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.claudesync.test</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>claudesync</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ClaudeSync uses the local network to discover other ClaudeSync instances on your network for file synchronization.</string>
 	<key>NSHumanReadableCopyright</key>
