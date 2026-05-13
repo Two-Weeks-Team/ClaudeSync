@@ -36,20 +36,38 @@ VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
 DMG_NAME="ClaudeSync-${VERSION}.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 
-# 2. Codesign (optional).
+# 2. Codesign.
+#    If CODESIGN_IDENTITY isn't set explicitly, auto-pick a local identity
+#    (prefer Developer ID Application for distribution; fall back to Apple
+#    Development — still gives the app a stable Designated Requirement so
+#    the macOS firewall stops treating each build as new code). Pass the
+#    SHA-1 hash to `codesign --sign` so the name is unambiguous.
+if [[ -z "${CODESIGN_IDENTITY:-}" ]]; then
+    CODESIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep "Developer ID Application:" | head -1 | awk '{print $2}')
+    [[ -z "$CODESIGN_IDENTITY" ]] && CODESIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep "Apple Development:" | head -1 | awk '{print $2}')
+fi
 if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
     echo ""
     echo "▶︎ Codesigning with: $CODESIGN_IDENTITY"
+    # `--timestamp` needs network + a Developer ID/Apple Development cert;
+    # if it fails (offline) fall back to `--timestamp=none` so a local
+    # build still succeeds (notarization is what truly needs the timestamp).
     codesign --force --options runtime \
         --entitlements ClaudeSync/Resources/ClaudeSync.entitlements \
         --sign "$CODESIGN_IDENTITY" \
         --timestamp \
+        "$APP_PATH" 2>/dev/null \
+      || codesign --force --options runtime \
+        --entitlements ClaudeSync/Resources/ClaudeSync.entitlements \
+        --sign "$CODESIGN_IDENTITY" \
+        --timestamp=none \
         "$APP_PATH"
     codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 else
-    echo "⚠️  CODESIGN_IDENTITY not set — DMG will be ad-hoc signed only."
-    echo "   Set it for distribution, e.g.:"
-    echo "     export CODESIGN_IDENTITY=\"Developer ID Application: Your Name (TEAMID)\""
+    echo "⚠️  No code-signing identity (CODESIGN_IDENTITY unset and none found) — DMG will be ad-hoc signed only."
+    echo "   The macOS firewall may keep prompting/blocking on machines that install this DMG."
 fi
 
 # 3. Stage.
