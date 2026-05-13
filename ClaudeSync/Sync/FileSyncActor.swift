@@ -119,6 +119,7 @@ public actor FileSyncActor {
 
         let args = config.builder.build(job: job, peer: peer)
         guard let executable = args.first else { return }
+        AppLogger.shared.info("rsync argv: \(args.joined(separator: " "))", category: "sync")
         let runner = ProcessRunner(
             executable: executable,
             arguments: Array(args.dropFirst())
@@ -157,6 +158,8 @@ public actor FileSyncActor {
         } catch let ProcessRunner.RunnerError.nonZeroExit(code, stderr) {
             outcome = .failure(reason: "rsync exit=\(code)")
             stderrText = stderr
+            AppLogger.shared.warning("rsync exit=\(code) stderr: \(stderr.prefix(800))",
+                                     category: "sync")
         } catch ProcessRunner.RunnerError.cancelled {
             outcome = .cancelled
         } catch let ProcessRunner.RunnerError.launchFailed(reason) {
