@@ -16,11 +16,17 @@ public protocol PeerChannel: Sendable {
     func send(_ message: ControlMessage) async throws
 
     /// Stream of decoded control messages received from the remote peer.
-    /// Finishes when ``close()`` is invoked or the underlying transport drops.
+    /// Finishes when ``close(reason:)`` is invoked or the underlying transport drops.
     func incomingMessages() -> AsyncStream<ControlMessage>
 
-    /// Close the channel; subsequent `send` calls throw.
-    func close() async
+    /// Close the channel; subsequent `send` calls throw. `reason` is logged
+    /// so a mysterious mid-handshake teardown can be traced to its source.
+    func close(reason: String) async
+}
+
+extension PeerChannel {
+    /// Convenience: close without a specific reason.
+    public func close() async { await close(reason: "explicit close()") }
 }
 
 // MARK: - Loopback test double
@@ -80,7 +86,8 @@ public final class LoopbackPeerChannel: PeerChannel, @unchecked Sendable {
         }
     }
 
-    public func close() async {
+    public func close(reason: String) async {
+        _ = reason   // loopback ignores it; only the real channel logs
         let cont = state.withLock { st -> AsyncStream<ControlMessage>.Continuation? in
             st.isClosed = true
             let c = st.continuation

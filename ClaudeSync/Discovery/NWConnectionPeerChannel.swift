@@ -82,14 +82,17 @@ public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
         }
     }
 
-    public func close() async {
-        let cont = state.withLock { st -> AsyncStream<ControlMessage>.Continuation? in
-            guard !st.isClosed else { return nil }
+    public func close(reason: String) async {
+        let (cont, didTransition) = state.withLock { st -> (AsyncStream<ControlMessage>.Continuation?, Bool) in
+            guard !st.isClosed else { return (nil, false) }
             st.isClosed = true
             let c = st.continuation
             st.continuation = nil
-            return c
+            return (c, true)
         }
+        guard didTransition else { return }   // already closed — don't re-log/re-cancel
+        logger.info("peer channel closing — \(reason) [endpoint \(String(describing: connection.endpoint))]",
+                    category: "discovery")
         cont?.finish()
         connection.cancel()
     }
@@ -100,11 +103,18 @@ public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             switch state {
+            case .ready:
+                let ifType = String(describing: self.connection.currentPath?.availableInterfaces.first?.type)
+                self.logger.info("NWConnection ready [endpoint \(String(describing: self.connection.endpoint)), iface \(ifType)]",
+                                 category: "discovery")
+            case .waiting(let err):
+                self.logger.info("NWConnection waiting: \(err.localizedDescription) [endpoint \(String(describing: self.connection.endpoint))]",
+                                 category: "discovery")
             case .failed(let err):
                 self.logger.warning("NWConnection failed: \(err.localizedDescription)", category: "discovery")
-                Task { await self.close() }
+                Task { await self.close(reason: "NWConnection .failed: \(err.localizedDescription)") }
             case .cancelled:
-                Task { await self.close() }
+                Task { await self.close(reason: "NWConnection .cancelled (something cancelled it)") }
             default:
                 break
             }
@@ -122,19 +132,19 @@ public final class NWConnectionPeerChannel: PeerChannel, @unchecked Sendable {
                     for msg in messages { cont?.yield(msg) }
                 } catch {
                     self.logger.warning("Frame decode failed: \(error)", category: "discovery")
-                    Task { await self.close() }
+                    Task { await self.close(reason: "frame decode failed: \(error)") }
                     return
                 }
             }
 
             if let error {
                 self.logger.warning("NWConnection receive error: \(error.localizedDescription)", category: "discovery")
-                Task { await self.close() }
+                Task { await self.close(reason: "receive error: \(error.localizedDescription)") }
                 return
             }
 
             if isComplete {
-                Task { await self.close() }
+                Task { await self.close(reason: "peer closed the connection (receive isComplete)") }
                 return
             }
 

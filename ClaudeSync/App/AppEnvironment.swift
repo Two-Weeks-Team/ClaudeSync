@@ -465,6 +465,8 @@ final class AppEnvironment {
                 currentState: "rejected", action: "initiate"
             )
         }
+        logger.info("initiating pairing with \(peer.hostname) (\(peer.machineId.uuidString.prefix(8)))",
+                    category: "pairing")
         let channel = try await discovery.connect(to: peer)
         let manager = makePairingManager(channel: channel)
         await beginPairingObservation(manager: manager)
@@ -475,9 +477,12 @@ final class AppEnvironment {
     private func acceptIncomingPairing(channel: PeerChannel) async {
         guard activePairing == nil else {
             // We're already mid-pairing; refuse this one cleanly.
-            await channel.close()
+            logger.info("inbound pairing connection refused — already mid-pairing; closing it",
+                        category: "pairing")
+            await channel.close(reason: "inbound rejected — already have an active pairing")
             return
         }
+        logger.info("inbound pairing connection accepted — waiting for pairRequest", category: "pairing")
         // v1.2: if auto-pair is enabled AND iCloud Keychain has any
         // record (we don't yet know WHICH peer is calling — pairRequest
         // hasn't arrived — so set a sentinel that the observation
@@ -682,9 +687,10 @@ final class AppEnvironment {
     }
 
     private func tearDownActivePairing() async {
+        logger.info("tearing down active pairing", category: "pairing")
         activePairingTask?.cancel()
         activePairingTask = nil
-        if let ch = activeChannel { await ch.close() }
+        if let ch = activeChannel { await ch.close(reason: "tearDownActivePairing") }
         activeChannel = nil
         activePairing = nil
         endPairingActivity()
