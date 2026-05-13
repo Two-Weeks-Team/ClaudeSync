@@ -36,8 +36,13 @@ public struct FirstLaunchPairingView: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(.tint)
             VStack(alignment: .leading) {
-                Text("Welcome to ClaudeSync")
-                    .font(.title2).bold()
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Welcome to ClaudeSync")
+                        .font(.title2).bold()
+                    Text(MenuBarRootView.appVersionString)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
                 Text("Sync your AI coding tool environments between two Macs.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
