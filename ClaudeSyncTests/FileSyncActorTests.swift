@@ -120,4 +120,93 @@ final class FileSyncActorTests: XCTestCase {
         XCTAssertEqual(pending, 2, "Two distinct (target,direction) groups")
         await actor.close()
     }
+
+    // MARK: - v1.2.15 regression tests
+
+    /// Reproduces the v1.2.14 stall: rsync hangs past the perJobTimeout, the
+    /// runner is forced to terminate the child, ``execute`` catches
+    /// ``RunnerError/timedOut`` and frees its slot so the next job can run.
+    /// Without the v1.2.15 fix the second enqueue would never produce a
+    /// result.
+    func testHangingRsync_timesOut_andFreesSlot_v1_2_15() async throws {
+        // `/usr/bin/yes` is a stand-in for a hung rsync: it runs forever
+        // (printing "y\n"), ignores every command-line flag the builder
+        // appends, and exits promptly on SIGTERM. ``ProcessRunner.cancel()``
+        // sends SIGTERM, so the perJobTimeout firing must release the lane.
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/yes",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(
+                maxConcurrent: 1,
+                builder: builder,
+                perJobTimeout: .milliseconds(200)
+            ),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        let stream = actor.results()
+        let consumer = Task<[SyncResult], Never> {
+            var out: [SyncResult] = []
+            for await r in stream {
+                out.append(r)
+                if out.count >= 1 { break }
+            }
+            return out
+        }
+
+        let job = SyncJob(target: .codexConfig, direction: .push)
+        await actor.enqueue(job)
+
+        let results = await consumer.value
+        XCTAssertEqual(results.count, 1)
+        guard case .failure(let reason) = results.first?.status else {
+            return XCTFail("Expected timeout-failure, got \(String(describing: results.first?.status))")
+        }
+        XCTAssertTrue(reason.contains("timed out"), "Reason should mention timeout: \(reason)")
+
+        // Critical: the slot must be released. Without v1.2.15 fix
+        // ``runningIDs`` would still hold the hung job's id.
+        let running = await actor.runningCount
+        XCTAssertEqual(running, 0, "Timed-out job must release its slot")
+        await actor.close()
+    }
+
+    /// v1.2.15 single-flight: when an rsync for `(target, .push)` is in
+    /// flight, a *second* enqueue with paths for the **same** lane must NOT
+    /// spawn a concurrent rsync. In production this caused 3 concurrent
+    /// `.claude/` rsyncs to fight over the same SSH session and deadlock.
+    ///
+    /// We construct the scenario by stalling the first job in flight (slow
+    /// "rsync") and enqueuing a *non-mergeable* full-sync follow-up to the
+    /// same lane. ``runningCount`` must remain at 1 while the first is
+    /// running; the second only dispatches after the first frees its slot.
+    func testSingleFlight_sameTarget_neverDispatchesConcurrently_v1_2_15() async throws {
+        // /usr/bin/yes hangs forever; we close the actor before it ever
+        // gets a chance to exit. perJobTimeout will eventually time it out
+        // on a slow runner, but the assertion fires well before that.
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/yes",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(
+                maxConcurrent: 3,                  // generous global limit
+                builder: builder,
+                perJobTimeout: .seconds(5)
+            ),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        // Two full-sync jobs for the same (target, direction) — the merge
+        // path doesn't apply (isFullSync == true), so they enter the queue
+        // as distinct entries.
+        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push, isFullSync: true))
+        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push, isFullSync: true))
+
+        // Give the actor a moment to dispatch the head of the queue.
+        try await Task.sleep(for: .milliseconds(80))
+        let runningWhileFirstInFlight = await actor.runningCount
+        XCTAssertEqual(runningWhileFirstInFlight, 1,
+                       "Same-lane second job must wait — saw \(runningWhileFirstInFlight) concurrent")
+        let pendingWhileFirstInFlight = await actor.pendingCount
+        XCTAssertEqual(pendingWhileFirstInFlight, 1,
+                       "Deferred same-lane job must remain in queue")
+        await actor.close()
+    }
 }
