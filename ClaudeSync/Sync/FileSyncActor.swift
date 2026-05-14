@@ -10,10 +10,24 @@ public actor FileSyncActor {
     public struct Configuration: Sendable {
         public let maxConcurrent: Int
         public let builder: RsyncCommandBuilder
+        /// Hard ceiling on a single rsync invocation. The rsync protocol can
+        /// deadlock (sender/receiver each waiting on the other) and the
+        /// `--timeout=N` flag only catches *data-idle* — not the file-list
+        /// negotiation phase. Without this ceiling, ``execute(job:)`` would
+        /// await ``ProcessRunner/run(timeout:)`` forever and leak its
+        /// ``runningIDs`` slot, eventually saturating ``maxConcurrent`` and
+        /// stalling the entire engine (v1.2.14 regression). Default 90s
+        /// covers the realistic worst-case sync (full ~/.claude with 60+
+        /// path includes) on a LAN. Tests can shrink this without affecting
+        /// behavior.
+        public let perJobTimeout: Duration
 
-        public init(maxConcurrent: Int = 3, builder: RsyncCommandBuilder = RsyncCommandBuilder()) {
+        public init(maxConcurrent: Int = 3,
+                    builder: RsyncCommandBuilder = RsyncCommandBuilder(),
+                    perJobTimeout: Duration = .seconds(90)) {
             self.maxConcurrent = maxConcurrent
             self.builder = builder
+            self.perJobTimeout = perJobTimeout
         }
     }
 
@@ -30,6 +44,9 @@ public actor FileSyncActor {
         self.peer = newPeer
         if newPeer == nil {
             queue.removeAll()
+            // runningIDs/runningTargets intentionally left untouched — the
+            // in-flight tasks will resolve and emit failures (no peer / I/O
+            // error) and call markFinished, which cleans them up.
         }
     }
 
@@ -42,6 +59,19 @@ public actor FileSyncActor {
 
     private var queue = SyncJobPriorityQueue()
     private var runningIDs: Set<UUID> = []
+    /// v1.2.15: per-target+direction single-flight key. We never dispatch two
+    /// concurrent rsync runs against the same `(target, direction)` because
+    /// they fight over the same SSH session/remote path and were observed to
+    /// deadlock in production (3 concurrent `.claude/` rsyncs hung for >5
+    /// minutes, saturating ``runningIDs``). Tracked separately from
+    /// ``runningIDs`` so the priority queue can still hold a *future* same-
+    /// target job that will dispatch as soon as the current one finishes.
+    private var runningTargets: Set<JobLane> = []
+    /// Composite key matching ``SyncJobPriorityQueue.findMergeable`` semantics.
+    private struct JobLane: Hashable {
+        let target: SyncTarget
+        let direction: SyncDirection
+    }
     private let resultsContinuation: AsyncStream<SyncResult>.Continuation
     private let resultsStream: AsyncStream<SyncResult>
     private let logger = AppLogger.shared
@@ -97,12 +127,31 @@ public actor FileSyncActor {
     // MARK: - Scheduling
 
     private func scheduleNext() {
+        // Dequeue while we have capacity AND the next job's lane is free.
+        // If the head of the queue is for a lane that's already in flight,
+        // we must NOT dispatch it — the receiving rsync would race the
+        // in-flight one and could deadlock the SSH session (v1.2.14
+        // production cause). Skip past it to look for a different-lane job,
+        // and remember the skipped ones so we can put them back.
+        var deferred: [SyncJob] = []
         while runningIDs.count < config.maxConcurrent, let next = queue.dequeue() {
+            let lane = JobLane(target: next.target, direction: next.direction)
+            if runningTargets.contains(lane) {
+                deferred.append(next)
+                continue
+            }
             runningIDs.insert(next.id)
+            runningTargets.insert(lane)
             Task { [weak self] in
                 guard let self else { return }
                 await self.execute(job: next)
             }
+        }
+        // Re-enqueue anything we skipped so a future scheduleNext (triggered
+        // by markFinished) can pick it up. enqueue() would re-merge it with
+        // any job that arrived in between, which is the behaviour we want.
+        for job in deferred {
+            queue.enqueue(job)
         }
     }
 
@@ -118,7 +167,18 @@ public actor FileSyncActor {
         }
 
         let args = config.builder.build(job: job, peer: peer)
-        guard let executable = args.first else { return }
+        guard let executable = args.first else {
+            // Defensive: an empty argv would mean the builder produced no
+            // command, which shouldn't happen. Without this fix the slot in
+            // ``runningIDs``/``runningTargets`` would leak forever (v1.2.15).
+            await emit(.init(
+                jobId: job.id, target: job.target,
+                status: .failure(reason: "rsync builder returned empty argv"),
+                stderr: "RsyncCommandBuilder.build returned []"
+            ))
+            await markFinished(job)
+            return
+        }
         AppLogger.shared.info("rsync argv: \(args.joined(separator: " "))", category: "sync")
         let runner = ProcessRunner(
             executable: executable,
@@ -150,7 +210,7 @@ public actor FileSyncActor {
         let outcome: SyncResult.ResultStatus
         var stderrText = ""
         do {
-            let out = try await runner.run()
+            let out = try await runner.run(timeout: config.perJobTimeout)
             outcome = Self.classifyRsyncOutcome(out)
             if case .partialSuccess = outcome {
                 stderrText = out.stderrString
@@ -162,6 +222,17 @@ public actor FileSyncActor {
                                      category: "sync")
         } catch ProcessRunner.RunnerError.cancelled {
             outcome = .cancelled
+        } catch let ProcessRunner.RunnerError.timedOut(limit) {
+            // v1.2.15: rsync hung past our perJobTimeout. ProcessRunner has
+            // already called cancel() on the child. Mark this attempt as a
+            // failure so the slot frees and a follow-up FSEvent can retry,
+            // and log loudly so it's obvious in Recent Activity rather than
+            // a silent stall.
+            outcome = .failure(reason: "rsync timed out after \(limit)")
+            AppLogger.shared.warning(
+                "rsync timed out after \(limit) — terminated child; lane will retry on next FSEvent",
+                category: "sync"
+            )
         } catch let ProcessRunner.RunnerError.launchFailed(reason) {
             outcome = .failure(reason: "rsync launch failed: \(reason)")
         } catch {
@@ -214,6 +285,7 @@ public actor FileSyncActor {
 
     private func markFinished(_ job: SyncJob) async {
         runningIDs.remove(job.id)
+        runningTargets.remove(JobLane(target: job.target, direction: job.direction))
         scheduleNext()
     }
 

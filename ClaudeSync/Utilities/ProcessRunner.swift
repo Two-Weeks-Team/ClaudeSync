@@ -22,6 +22,13 @@ public actor ProcessRunner {
         case launchFailed(String)
         case nonZeroExit(code: Int32, stderr: String)
         case cancelled
+        /// v1.2.15: ``run(timeout:)`` reached the supplied deadline before the
+        /// child process exited. The runner has already invoked
+        /// ``cancel()`` to terminate the child; the duration in the
+        /// associated value is the *configured* limit, not the real elapsed
+        /// time. Callers can treat this distinctly from
+        /// ``cancelled`` (which means the host task was cancelled).
+        case timedOut(Duration)
     }
 
     public let executable: String
@@ -54,7 +61,39 @@ public actor ProcessRunner {
 
     /// Run process, wait for exit, and capture full stdout/stderr.
     /// Throws ``RunnerError/nonZeroExit`` when the exit status is non-zero.
-    public func run() async throws -> Output {
+    ///
+    /// - Parameter timeout: When non-nil, the child is `terminate()`d and the
+    ///   call throws ``RunnerError/timedOut(_:)`` if exit does not happen
+    ///   within `timeout`. Required for rsync-over-ssh invocations where the
+    ///   underlying rsync protocol can deadlock and ``run()`` without a
+    ///   timeout would await forever (v1.2.15 regression cause).
+    public func run(timeout: Duration? = nil) async throws -> Output {
+        guard let timeout else {
+            return try await runUntilExit()
+        }
+        return try await withThrowingTaskGroup(of: Output.self) { group in
+            group.addTask { try await self.runUntilExit() }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                // Cancel the running child *before* throwing, so the
+                // ``runUntilExit`` task can resolve its continuation and not
+                // strand a process orphan.
+                await self.cancel()
+                throw RunnerError.timedOut(timeout)
+            }
+            do {
+                let first = try await group.next()
+                group.cancelAll()
+                return first ?? Output(exitCode: -1, stdout: Data(), stderr: Data())
+            } catch {
+                group.cancelAll()
+                throw error
+            }
+        }
+    }
+
+    /// Internal worker — same shape as the pre-v1.2.15 ``run()`` body.
+    private func runUntilExit() async throws -> Output {
         let (process, stdoutPipe, stderrPipe) = try makeProcess()
         currentProcess = process
 
