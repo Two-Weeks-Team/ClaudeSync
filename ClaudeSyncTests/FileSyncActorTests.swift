@@ -179,6 +179,100 @@ final class FileSyncActorTests: XCTestCase {
     /// "rsync") and enqueuing a *non-mergeable* full-sync follow-up to the
     /// same lane. ``runningCount`` must remain at 1 while the first is
     /// running; the second only dispatches after the first frees its slot.
+    // MARK: - v1.2.16 chunking regression
+
+    /// A single enqueue carrying more than ``maxPathsPerJob`` paths must
+    /// split into multiple queue entries, each at or below the cap. This
+    /// prevents the giant-`--include` rsync invocation that routinely
+    /// tripped the 90s timeout in production. We pick maxConcurrent=0 so
+    /// nothing actually dispatches — we only inspect queue state.
+    func testEnqueue_oversizedPathsSet_splitsIntoCappedChunks_v1_2_16() async throws {
+        let cap = 4
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder, maxPathsPerJob: cap),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        let paths = (1...10).map { "/p/\($0)" }
+        await actor.enqueue(SyncJob(
+            target: .claudeConfig,
+            paths: Set(paths),
+            direction: .push
+        ))
+
+        let pending = await actor.pendingCount
+        XCTAssertEqual(pending, 3, "10 paths at cap=4 must produce 3 jobs (4+4+2)")
+
+        // Verify every queued job respects the cap.
+        let snapshot = await actor.snapshot()
+        for j in snapshot {
+            XCTAssertLessThanOrEqual(j.paths.count, cap,
+                                     "job \(j.id) has \(j.paths.count) paths > cap \(cap)")
+        }
+        // Sum must equal original — no paths lost on split.
+        let totalAfter = snapshot.reduce(0) { $0 + $1.paths.count }
+        XCTAssertEqual(totalAfter, paths.count, "Split must preserve all paths")
+        await actor.close()
+    }
+
+    /// Merging into an existing same-lane queue job must respect the cap:
+    /// fill the headroom, then enqueue the overflow as a fresh job. Without
+    /// this guard, repeated FSEvent bursts could re-grow a job past the
+    /// cap and re-create the giant-batch hazard.
+    func testEnqueue_mergeRespectsCap_overflowSpillsToNewJob_v1_2_16() async throws {
+        let cap = 4
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder, maxPathsPerJob: cap),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        // First enqueue → fills the queue with one job at cap=4.
+        await actor.enqueue(SyncJob(
+            target: .claudeConfig,
+            paths: Set(["/a/1", "/a/2", "/a/3", "/a/4"]),
+            direction: .push
+        ))
+        // Second enqueue (3 more paths) — first should *not* be merged
+        // (cap headroom is 0); all 3 should become a new queued job.
+        await actor.enqueue(SyncJob(
+            target: .claudeConfig,
+            paths: Set(["/b/1", "/b/2", "/b/3"]),
+            direction: .push
+        ))
+
+        let snapshot = await actor.snapshot()
+        XCTAssertEqual(snapshot.count, 2)
+        for j in snapshot {
+            XCTAssertLessThanOrEqual(j.paths.count, cap,
+                                     "job \(j.id) has \(j.paths.count) paths > cap \(cap)")
+        }
+        await actor.close()
+    }
+
+    /// Full-sync jobs (empty `paths` ⇒ `isFullSync == true`) are inherently
+    /// unsplittable — the whole tree is the unit of work — and must enqueue
+    /// as a single job regardless of the cap.
+    func testEnqueue_fullSyncJobBypassesChunking_v1_2_16() async throws {
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder, maxPathsPerJob: 4),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        await actor.enqueue(SyncJob(
+            target: .claudeConfig,
+            direction: .push,
+            isFullSync: true
+        ))
+        let pending = await actor.pendingCount
+        XCTAssertEqual(pending, 1, "Full-sync job must not be split")
+        await actor.close()
+    }
+
+    // MARK: - v1.2.15 regression tests
+
     func testSingleFlight_sameTarget_neverDispatchesConcurrently_v1_2_15() async throws {
         // /usr/bin/yes hangs forever; we close the actor before it ever
         // gets a chance to exit. perJobTimeout will eventually time it out

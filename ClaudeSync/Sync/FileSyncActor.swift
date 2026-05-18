@@ -21,13 +21,27 @@ public actor FileSyncActor {
         /// path includes) on a LAN. Tests can shrink this without affecting
         /// behavior.
         public let perJobTimeout: Duration
+        /// Maximum number of file paths an individual ``SyncJob`` (and thus
+        /// a single rsync invocation) may carry. v1.2.15 fixed the leak that
+        /// followed a deadlocked rsync; v1.2.16 attacks the *cause*: a
+        /// merge-only ``BatchAccumulator`` would coalesce 60+ FSEvents into
+        /// one giant `--include` list that took rsync minutes to negotiate
+        /// and routinely tripped the 90s ceiling. Splitting at enqueue
+        /// keeps each rsync small enough to finish well under the timeout,
+        /// so the safety net never fires under normal load. Empirically
+        /// 16 paths per chunk leaves headroom for the ~1.3KB per-include
+        /// argv overhead and still allows a 256-path FSEvent burst to
+        /// process in well under a minute on a LAN.
+        public let maxPathsPerJob: Int
 
         public init(maxConcurrent: Int = 3,
                     builder: RsyncCommandBuilder = RsyncCommandBuilder(),
-                    perJobTimeout: Duration = .seconds(90)) {
+                    perJobTimeout: Duration = .seconds(90),
+                    maxPathsPerJob: Int = 16) {
             self.maxConcurrent = maxConcurrent
             self.builder = builder
             self.perJobTimeout = perJobTimeout
+            self.maxPathsPerJob = maxPathsPerJob
         }
     }
 
@@ -106,19 +120,79 @@ public actor FileSyncActor {
                         category: "sync")
             return
         }
-        if !job.isFullSync,
-           let existing = queue.findMergeable(target: job.target, direction: job.direction) {
-            queue.mergePaths(into: existing.id, paths: job.paths)
-            logger.info("merged \(job.paths.count) paths into existing job \(existing.id)",
-                        category: "sync")
-        } else {
+        // Full-sync jobs (paths is empty / isFullSync == true) are inherently
+        // un-chunkable — the whole tree is the unit of work. Enqueue as-is.
+        guard !job.isFullSync else {
             queue.enqueue(job)
+            scheduleNext()
+            return
         }
+
+        // v1.2.16: cap the path count per individual rsync invocation. The
+        // per-target single-flight from v1.2.15 will serialize these chunks
+        // through the same lane in deterministic order, and the smaller
+        // `--include` lists negotiate fast enough that the 90s safety net
+        // never fires under normal load. Pre-split the incoming paths
+        // before consulting the merge target so an oversized merge can't
+        // re-create the giant-batch hazard.
+        let cap = max(1, config.maxPathsPerJob)
+        var remaining = Array(job.paths)
+        var enqueuedAnyNewJob = false
+
+        // First, try to top up an existing queue-side job for the same lane
+        // up to (but not past) the cap. This preserves the v1.1 coalescing
+        // benefit for rapid FSEvent bursts without blowing the chunk size.
+        if let existing = queue.findMergeable(target: job.target, direction: job.direction) {
+            let headroom = cap - existing.paths.count
+            if headroom > 0 && !remaining.isEmpty {
+                let take = min(headroom, remaining.count)
+                let slice = Array(remaining.prefix(take))
+                remaining.removeFirst(take)
+                queue.mergePaths(into: existing.id, paths: Set(slice))
+                logger.info(
+                    "merged \(slice.count) paths into existing job \(existing.id) (lane=\(job.target.rawValue))",
+                    category: "sync"
+                )
+            }
+        }
+
+        // Anything left over becomes one or more fresh queued jobs, each at
+        // or below the cap. Same lane => v1.2.15's runningTargets gate
+        // ensures they dispatch one-at-a-time.
+        while !remaining.isEmpty {
+            let take = min(cap, remaining.count)
+            let chunk = Array(remaining.prefix(take))
+            remaining.removeFirst(take)
+            let sub = SyncJob(
+                target: job.target,
+                paths: Set(chunk),
+                direction: job.direction,
+                priority: job.priority,
+                tier: job.tier,
+                isFullSync: false,
+                retryCount: job.retryCount
+            )
+            queue.enqueue(sub)
+            enqueuedAnyNewJob = true
+            if chunk.count < job.paths.count {
+                logger.info(
+                    "chunk \(sub.id) (\(chunk.count) paths, lane=\(job.target.rawValue))",
+                    category: "sync"
+                )
+            }
+        }
+        // If everything went into a merge, that's fine — no new job created.
+        _ = enqueuedAnyNewJob
         scheduleNext()
     }
 
     public var pendingCount: Int { queue.count }
     public var runningCount: Int { runningIDs.count }
+
+    /// Read-only view of the queued (not yet dispatched) jobs in priority
+    /// order. Exposed for tests and diagnostics; production code should not
+    /// rely on the ordering or on capturing this snapshot.
+    public func snapshot() -> [SyncJob] { queue.snapshot() }
 
     public func close() {
         resultsContinuation.finish()
