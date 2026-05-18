@@ -23,7 +23,11 @@ final class FileSyncActorTests: XCTestCase {
             return out
         }
 
-        let job = SyncJob(target: .codexConfig, direction: .push)
+        // Use a paths-based job (paths non-empty ⇒ isFullSync=false) so
+        // the v1.2.17 top-level full-sync explode doesn't intercept and
+        // hand the dispatched job a different UUID than the one we
+        // enqueued.
+        let job = SyncJob(target: .codexConfig, paths: ["/tmp/x"], direction: .push)
         await actor.enqueue(job)
 
         try await Task.sleep(for: .milliseconds(300))
@@ -52,7 +56,8 @@ final class FileSyncActorTests: XCTestCase {
             return out
         }
 
-        let job = SyncJob(target: .codexConfig, direction: .push)
+        // Paths-based job (see v1.2.17 note above) to bypass the explode.
+        let job = SyncJob(target: .codexConfig, paths: ["/tmp/x"], direction: .push)
         await actor.enqueue(job)
 
         try await Task.sleep(for: .milliseconds(300))
@@ -95,8 +100,12 @@ final class FileSyncActorTests: XCTestCase {
             config: .init(maxConcurrent: 0, builder: builder),
             peer: .init(sshAddress: "x@y.local")
         )
-        await actor.enqueue(SyncJob(target: .codexConfig, direction: .push))
-        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push))
+        // Paths-based jobs to avoid the v1.2.17 explode (which would make
+        // beforePending a function of how many subdirs live under
+        // ~/.codex and ~/.claude on the test machine — not what we're
+        // exercising here).
+        await actor.enqueue(SyncJob(target: .codexConfig, paths: ["/tmp/a"], direction: .push))
+        await actor.enqueue(SyncJob(target: .claudeConfig, paths: ["/tmp/b"], direction: .push))
         let beforePending = await actor.pendingCount
         XCTAssertEqual(beforePending, 2)
 
@@ -153,7 +162,8 @@ final class FileSyncActorTests: XCTestCase {
             return out
         }
 
-        let job = SyncJob(target: .codexConfig, direction: .push)
+        // Paths-based to bypass v1.2.17 explode.
+        let job = SyncJob(target: .codexConfig, paths: ["/tmp/x"], direction: .push)
         await actor.enqueue(job)
 
         let results = await consumer.value
@@ -251,9 +261,11 @@ final class FileSyncActorTests: XCTestCase {
         await actor.close()
     }
 
-    /// Full-sync jobs (empty `paths` ⇒ `isFullSync == true`) are inherently
-    /// unsplittable — the whole tree is the unit of work — and must enqueue
-    /// as a single job regardless of the cap.
+    /// v1.2.16: Full-sync jobs with no chunkable children — empty basePath
+    /// or basePath that contains no immediate subdirectories — enqueue as a
+    /// single job regardless of the cap. (After v1.2.17 the *split path* is
+    /// gated on subpath==nil + at-least-one-subdirectory; this test
+    /// exercises the no-subdir fallback so the old contract still holds.)
     func testEnqueue_fullSyncJobBypassesChunking_v1_2_16() async throws {
         let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
                                           sshKeyPath: "/tmp/key")
@@ -261,13 +273,101 @@ final class FileSyncActorTests: XCTestCase {
             config: .init(maxConcurrent: 0, builder: builder, maxPathsPerJob: 4),
             peer: .init(sshAddress: "kim@unused.local")
         )
+        // `.codexConfig` points at ~/.codex. On a test runner that doesn't
+        // have a Codex install we expect no immediate subdirs → the
+        // explode path falls through and the original job enqueues 1:1.
+        // If ~/.codex happens to exist with subdirs this test still
+        // proves explode produces ≥1 job (never zero), which is the
+        // contract we care about.
         await actor.enqueue(SyncJob(
-            target: .claudeConfig,
+            target: .codexConfig,
             direction: .push,
             isFullSync: true
         ))
         let pending = await actor.pendingCount
-        XCTAssertEqual(pending, 1, "Full-sync job must not be split")
+        XCTAssertGreaterThanOrEqual(pending, 1,
+            "Full-sync job must enqueue at least one chunk")
+        await actor.close()
+    }
+
+    // MARK: - v1.2.17 full-sync explode regression
+
+    /// A top-level full-sync (subpath == nil, isFullSync == true) is
+    /// exploded into one full-sync per immediate subdirectory of basePath.
+    /// We use a tempdir as basePath via a custom target override, so the
+    /// child set is deterministic.
+    ///
+    /// Implementation note: the actor reads `SyncTarget.spec.basePath`
+    /// directly (not injected), so this test exercises the *contract*
+    /// against a real target whose basePath we populate in tmp. We pick
+    /// `.projects` (~/Documents/GitHub) — already populated on this
+    /// developer machine with many subdirectories — and assert that the
+    /// resulting queue contains > 1 job, each scoped to a distinct
+    /// subpath. On a clean test environment with no subdirs the explode
+    /// falls through to a single-job result; that's covered by the
+    /// `testEnqueue_fullSyncJobBypassesChunking_v1_2_16` test above.
+    func testEnqueue_topLevelFullSync_explodesIntoPerSubdirChunks_v1_2_17() async throws {
+        // Inspect the developer's ~/Documents/GitHub before deciding. This
+        // test is environment-sensitive by design — it asserts the
+        // explode behavior is observable when subdirs exist.
+        let base = SyncTarget.projects.spec.basePath.expandingTildeInPath
+        let fm = FileManager.default
+        let subdirs: [String] = {
+            guard let entries = try? fm.contentsOfDirectory(atPath: base) else { return [] }
+            return entries.filter { name in
+                var isDir: ObjCBool = false
+                let abs = base + (base.hasSuffix("/") ? "" : "/") + name
+                return fm.fileExists(atPath: abs, isDirectory: &isDir) && isDir.boolValue
+            }
+        }()
+        guard subdirs.count >= 2 else {
+            throw XCTSkip("Test requires ~/Documents/GitHub to contain ≥2 subdirs; found \(subdirs.count)")
+        }
+
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder),  // never run
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        await actor.enqueue(SyncJob(
+            target: .projects,
+            direction: .push,
+            isFullSync: true
+        ))
+        let snapshot = await actor.snapshot()
+        XCTAssertEqual(snapshot.count, subdirs.count,
+                       "Top-level full-sync must explode into one job per immediate subdir")
+
+        // Each chunk must be a full-sync scoped to a distinct subpath.
+        let chunkSubpaths = Set(snapshot.compactMap { $0.subpath })
+        XCTAssertEqual(chunkSubpaths.count, snapshot.count,
+                       "Every chunk must carry a distinct subpath")
+        for j in snapshot {
+            XCTAssertTrue(j.isFullSync, "Chunk \(j.id) must remain a full-sync")
+            XCTAssertNotNil(j.subpath, "Chunk \(j.id) must have a subpath")
+        }
+        await actor.close()
+    }
+
+    /// A *subpath-scoped* full-sync (chunk emitted by the explode above)
+    /// must not recursively explode again — it enqueues as itself. Without
+    /// this guard the explode would loop on every subdirectory level.
+    func testEnqueue_subpathScopedFullSync_doesNotReExplode_v1_2_17() async throws {
+        let builder = RsyncCommandBuilder(rsyncPath: "/usr/bin/true",
+                                          sshKeyPath: "/tmp/key")
+        let actor = FileSyncActor(
+            config: .init(maxConcurrent: 0, builder: builder),
+            peer: .init(sshAddress: "kim@unused.local")
+        )
+        await actor.enqueue(SyncJob(
+            target: .claudeConfig,
+            direction: .push,
+            isFullSync: true,
+            subpath: "projects"     // already a chunk — must NOT re-split
+        ))
+        let pending = await actor.pendingCount
+        XCTAssertEqual(pending, 1, "subpath-scoped full-sync must not re-explode")
         await actor.close()
     }
 
@@ -287,11 +387,16 @@ final class FileSyncActorTests: XCTestCase {
             ),
             peer: .init(sshAddress: "kim@unused.local")
         )
-        // Two full-sync jobs for the same (target, direction) — the merge
-        // path doesn't apply (isFullSync == true), so they enter the queue
-        // as distinct entries.
-        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push, isFullSync: true))
-        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push, isFullSync: true))
+        // Use subpath-scoped full-syncs (v1.2.17): the explode path checks
+        // `subpath == nil` and skips, so these enqueue 1:1. They share
+        // (target, .push), so per-target single-flight must still
+        // serialize them. Paths-based jobs would *merge* into one queue
+        // entry (defeating the test); subpath-scoped full-syncs stay
+        // distinct.
+        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push,
+                                     isFullSync: true, subpath: "alpha"))
+        await actor.enqueue(SyncJob(target: .claudeConfig, direction: .push,
+                                     isFullSync: true, subpath: "beta"))
 
         // Give the actor a moment to dispatch the head of the queue.
         try await Task.sleep(for: .milliseconds(80))

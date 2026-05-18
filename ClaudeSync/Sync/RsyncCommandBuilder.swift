@@ -96,7 +96,28 @@ public struct RsyncCommandBuilder: Sendable {
         // normally-excluded directory still goes through. Within the
         // exclude block, security patterns must come first so a
         // user-supplied include can never shadow them (SEC-008).
-        let basePath = job.target.spec.basePath.expandingTildeInPath
+        // v1.2.17: when SyncJob.subpath is set we scope the *entire* rsync
+        // (source path + remote destination + filter rules) to
+        // `basePath/subpath/`. This lets a giant launch-time full-sync be
+        // split across many smaller per-subdirectory rsyncs by
+        // FileSyncActor without rsync needing any special filter wizardry —
+        // each invocation is just a normal full-sync of a smaller subtree,
+        // and `--delete` stays safely bounded to that subtree.
+        let basePathRaw = job.target.spec.basePath
+        let basePath: String = {
+            let expandedRoot = basePathRaw.expandingTildeInPath
+            if let sub = job.subpath, !sub.isEmpty {
+                return expandedRoot
+                    .appendingPathSegment(sub)
+            }
+            return expandedRoot
+        }()
+        let remoteBasePathRaw: String = {
+            if let sub = job.subpath, !sub.isEmpty {
+                return basePathRaw.appendingPathSegment(sub)
+            }
+            return basePathRaw
+        }()
 
         // Includes (when targeting specific paths only).
         if !job.isFullSync {
@@ -126,7 +147,7 @@ public struct RsyncCommandBuilder: Sendable {
         }
 
         let localTrailing = ensureTrailingSlash(basePath)
-        let remoteTrailing = ensureTrailingSlash(job.target.spec.basePath)
+        let remoteTrailing = ensureTrailingSlash(remoteBasePathRaw)
         // v1.2.14: quote the *remote* path so its spaces survive ssh →
         // remote shell → wrapper → rsync. macOS Sequoia's openrsync
         // lacks `--protect-args` (which would pack args into rsync's
@@ -201,5 +222,18 @@ public struct RsyncCommandBuilder: Sendable {
         let baseSlashed = base.hasSuffix("/") ? base : base + "/"
         guard absolute.hasPrefix(baseSlashed) else { return nil }
         return String(absolute.dropFirst(baseSlashed.count))
+    }
+}
+
+// MARK: - Path helpers (v1.2.17)
+
+extension String {
+    /// Joins `self` with `segment`, inserting exactly one separator. Strips
+    /// any leading `/` from `segment` so a callers' "/Users/x" + "/foo" can't
+    /// reset to "/foo". Used to build per-subdirectory rsync paths.
+    fileprivate func appendingPathSegment(_ segment: String) -> String {
+        let s = segment.hasPrefix("/") ? String(segment.dropFirst()) : segment
+        if self.hasSuffix("/") { return self + s }
+        return self + "/" + s
     }
 }

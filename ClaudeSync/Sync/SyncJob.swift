@@ -26,6 +26,15 @@ public struct SyncJob: Identifiable, Sendable, Equatable {
     public let tier: SyncTier
     public let createdAt: ContinuousClock.Instant
     public let isFullSync: Bool
+    /// v1.2.17: when non-nil, restricts the rsync to
+    /// `basePath/subpath/` on both ends. Lets us split a giant full-sync
+    /// (the only case the v1.2.16 chunking can't handle, since paths-based
+    /// chunking doesn't recurse into included directories) into N
+    /// per-subdirectory full-syncs that each finish under the timeout.
+    /// `--delete` semantics stay safe because each rsync is bounded to its
+    /// own subtree. Top-level new/delete is picked up by subsequent
+    /// FSEvents and need not be part of the explode.
+    public let subpath: String?
     public var retryCount: Int
 
     public init(
@@ -37,7 +46,8 @@ public struct SyncJob: Identifiable, Sendable, Equatable {
         tier: SyncTier = .realtime,
         createdAt: ContinuousClock.Instant = .now,
         isFullSync: Bool = false,
-        retryCount: Int = 0
+        retryCount: Int = 0,
+        subpath: String? = nil
     ) {
         self.id = id
         self.target = target
@@ -48,6 +58,7 @@ public struct SyncJob: Identifiable, Sendable, Equatable {
         self.createdAt = createdAt
         self.isFullSync = isFullSync || paths.isEmpty
         self.retryCount = retryCount
+        self.subpath = subpath
     }
 }
 
