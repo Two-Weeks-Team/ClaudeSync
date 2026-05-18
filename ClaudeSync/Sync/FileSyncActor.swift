@@ -120,8 +120,59 @@ public actor FileSyncActor {
                         category: "sync")
             return
         }
-        // Full-sync jobs (paths is empty / isFullSync == true) are inherently
-        // un-chunkable — the whole tree is the unit of work. Enqueue as-is.
+        // Full-sync jobs (paths is empty / isFullSync == true) used to be
+        // un-chunkable: paths-based chunking doesn't help because rsync's
+        // `--include` filter rules don't recurse into included directories
+        // without the GNU-only `***` syntax that openrsync rejects. v1.2.17
+        // takes a different route: at the *top-level* full-sync (subpath
+        // == nil), we list `basePath`'s immediate child directories and
+        // emit one full-sync *per subdirectory* (subpath = child). Each
+        // per-subdir rsync is a regular full-sync of that smaller subtree,
+        // `--delete` stays safely bounded inside the subtree, and the
+        // v1.2.15 per-target single-flight serializes the resulting
+        // children so the SSH session never fights itself. Top-level
+        // new/delete is picked up by the next FSEvent (FSEvents fires on
+        // the parent dir when its entries change).
+        if job.isFullSync && job.subpath == nil {
+            let base = job.target.spec.basePath.expandingTildeInPath
+            let children = (try? FileManager.default
+                .contentsOfDirectory(atPath: base)) ?? []
+            // Only directories — files at top-level are handled by the
+            // fallback path below (re-enqueued as a single full-sync).
+            let fm = FileManager.default
+            let subdirs = children.filter { name in
+                var isDir: ObjCBool = false
+                let absolute = base + (base.hasSuffix("/") ? "" : "/") + name
+                return fm.fileExists(atPath: absolute, isDirectory: &isDir) && isDir.boolValue
+            }
+            if subdirs.isEmpty {
+                // Empty / nothing to split — keep original behaviour.
+                queue.enqueue(job)
+                scheduleNext()
+                return
+            }
+            for sub in subdirs {
+                let chunk = SyncJob(
+                    target: job.target,
+                    paths: [],
+                    direction: job.direction,
+                    priority: job.priority,
+                    tier: job.tier,
+                    isFullSync: true,
+                    retryCount: job.retryCount,
+                    subpath: sub
+                )
+                queue.enqueue(chunk)
+            }
+            logger.info(
+                "exploded top-level full-sync of \(job.target.rawValue) into \(subdirs.count) per-subdir chunks",
+                category: "sync"
+            )
+            scheduleNext()
+            return
+        }
+        // A subpath-scoped full-sync (already a chunk) or an unsplittable
+        // full-sync (no children) enqueues as-is.
         guard !job.isFullSync else {
             queue.enqueue(job)
             scheduleNext()
@@ -136,12 +187,11 @@ public actor FileSyncActor {
         // before consulting the merge target so an oversized merge can't
         // re-create the giant-batch hazard.
         let cap = max(1, config.maxPathsPerJob)
-        var remaining = Array(job.paths)
-        var enqueuedAnyNewJob = false
 
         // First, try to top up an existing queue-side job for the same lane
         // up to (but not past) the cap. This preserves the v1.1 coalescing
         // benefit for rapid FSEvent bursts without blowing the chunk size.
+        var remaining = Array(job.paths)
         if let existing = queue.findMergeable(target: job.target, direction: job.direction) {
             let headroom = cap - existing.paths.count
             if headroom > 0 && !remaining.isEmpty {
@@ -154,6 +204,16 @@ public actor FileSyncActor {
                     category: "sync"
                 )
             }
+        }
+        // Fast path: nothing got merged AND the whole job fits in one
+        // chunk → enqueue the *original* job (preserving its UUID, which
+        // callers — including FSEvent bookkeeping and tests — rely on for
+        // result correlation). Only enter the splitting loop when we
+        // actually need to split.
+        if remaining.count == job.paths.count && remaining.count <= cap {
+            queue.enqueue(job)
+            scheduleNext()
+            return
         }
 
         // Anything left over becomes one or more fresh queued jobs, each at
@@ -173,16 +233,11 @@ public actor FileSyncActor {
                 retryCount: job.retryCount
             )
             queue.enqueue(sub)
-            enqueuedAnyNewJob = true
-            if chunk.count < job.paths.count {
-                logger.info(
-                    "chunk \(sub.id) (\(chunk.count) paths, lane=\(job.target.rawValue))",
-                    category: "sync"
-                )
-            }
+            logger.info(
+                "chunk \(sub.id) (\(chunk.count) paths, lane=\(job.target.rawValue))",
+                category: "sync"
+            )
         }
-        // If everything went into a merge, that's fine — no new job created.
-        _ = enqueuedAnyNewJob
         scheduleNext()
     }
 

@@ -72,12 +72,21 @@ final class SyncCoordinatorTests: XCTestCase {
 
         await coord.triggerFullSync(.projects)
 
+        // v1.2.17: a top-level full-sync is exploded into one chunk per
+        // immediate subdirectory of basePath, each scoped via SyncJob.subpath
+        // (still isFullSync, still onDemand). On an empty/no-subdir basePath
+        // the explode falls through to a single original job. Either way
+        // pendingCount must be ≥ 1; every chunk must carry the original
+        // target+tier+isFullSync attributes.
         let pending = await sync.pendingCount
-        XCTAssertEqual(pending, 1)
-        let job = await sync.queueSnapshot()?.first
-        XCTAssertEqual(job?.target, .projects)
-        XCTAssertTrue(job?.isFullSync ?? false)
-        XCTAssertEqual(job?.tier, .onDemand)
+        XCTAssertGreaterThanOrEqual(pending, 1)
+        let jobs = await sync.queueSnapshot() ?? []
+        XCTAssertFalse(jobs.isEmpty)
+        for job in jobs {
+            XCTAssertEqual(job.target, .projects)
+            XCTAssertTrue(job.isFullSync)
+            XCTAssertEqual(job.tier, .onDemand)
+        }
     }
 }
 
