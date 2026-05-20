@@ -18,6 +18,24 @@ final class SyncTargetTests: XCTestCase {
         XCTAssertEqual(spec.tier(forRelativePath: "hooks/pre-commit.sh"), .realtime)
         XCTAssertEqual(spec.tier(forRelativePath: "sessions/abc.jsonl"), .batched)
         XCTAssertEqual(spec.tier(forRelativePath: "transcripts/x.md"), .batched)
+        // v1.3.3: high-churn append-only files routed to batched so they
+        // don't flood the realtime tier (the "server not responding" storm).
+        XCTAssertEqual(spec.tier(forRelativePath: "projects/-Users-x/abc.jsonl"), .batched)
+        XCTAssertEqual(spec.tier(forRelativePath: "history.jsonl"), .batched)
+        // Skill SOURCE stays realtime (small, latency-sensitive edits).
+        XCTAssertEqual(spec.tier(forRelativePath: "skills/foo/SKILL.md"), .realtime)
+    }
+
+    func testClaudeConfig_excludesEphemeralCachesAndLogs() {
+        let ex = SyncTarget.claudeConfig.spec.excludePatterns
+        // v1.3.3: machine-local plugin caches + logs must not propagate.
+        for pat in ["context-cache/", "transcript-cache/", "config-cache/", "logs/"] {
+            XCTAssertTrue(ex.contains(pat), "claudeConfig should exclude \(pat)")
+        }
+        // v1.3.2: per-machine build artifacts.
+        for pat in [".venv/", "node_modules/", "__pycache__/"] {
+            XCTAssertTrue(ex.contains(pat), "claudeConfig should exclude \(pat)")
+        }
     }
 
     func testProjects_isOnDemand_andSupportsLocalIgnore() {
