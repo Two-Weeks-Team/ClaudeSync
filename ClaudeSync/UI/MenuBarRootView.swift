@@ -214,7 +214,7 @@ struct MenuBarRootView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Targets")
                 .font(.caption).foregroundStyle(.secondary)
-            ForEach(SyncTarget.allCases) { target in
+            ForEach(SyncTarget.active) { target in
                 HStack(spacing: 8) {
                     Image(systemName: "folder")
                         .foregroundStyle(.secondary)

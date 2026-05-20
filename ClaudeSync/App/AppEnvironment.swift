@@ -275,12 +275,14 @@ final class AppEnvironment {
         if currentPreferences.autoPairSameAppleID {
             await publishOwnICloudRecord()
         }
-        // RCA-M1: include .projects in the watch set so on-demand pulls work
-        // when the user clicks "Force Sync" on Documents/GitHub. Without
-        // this the watcher never spins up the project FSEvent stream.
-        await coordinator.start(targets: [
-            .claudeConfig, .claudeAppSupport, .codexConfig, .projects
-        ])
+        // v1.3.2: ~/Documents/GitHub is intentionally NOT synced. git is the
+        // source of truth for projects — both Macs clone/pull independently,
+        // so rsync-mirroring the working trees is redundant, heavy (thousands
+        // of files inflate every file-list build and compounded the
+        // SYNC-DEADLOCK timeouts), and risks clobbering a live `.git` working
+        // tree mid-operation. The `.projects` target spec is kept in
+        // SyncTarget for callers/tests, just dropped from the active watch set.
+        await coordinator.start(targets: Set(SyncTarget.active))
 
         // RCA-C3: re-wire the previously-paired peer (if any) so sync starts
         // working immediately after launch, before discovery even completes.
