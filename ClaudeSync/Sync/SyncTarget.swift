@@ -123,9 +123,26 @@ public extension SyncTarget {
                     ".venv/", "venv/",
                     "node_modules/",
                     "__pycache__/", "*.pyc",
+                    // v1.3.3: per-machine ephemera. The claude-hud status-line
+                    // plugin rewrites these derived caches on every prompt
+                    // (context/transcript/config), and Claude Code appends to
+                    // logs/ continuously. They're machine-local rendering state
+                    // — propagating them flooded the realtime tier (~100
+                    // syncs/10min) and was a top contributor to the
+                    // "server not responding" storm. Match by dir name so any
+                    // plugin's caches are covered, at any depth.
+                    "context-cache/", "transcript-cache/", "config-cache/",
+                    "logs/",
                 ],
                 defaultTier: .realtime,
-                heavySubpaths: ["sessions/", "transcripts/"],
+                // v1.3.3: route the high-churn append-only files to the
+                // batched (5-min) tier instead of realtime. Active session
+                // transcripts (projects/<id>.jsonl, written on every tool call)
+                // and the prompt history (history.jsonl) generated 350+
+                // realtime syncs/10min — a self-sustaining storm that saturated
+                // the peer. They are not latency-sensitive, so 5-min batching
+                // collapses the churn while still converging.
+                heavySubpaths: ["sessions/", "transcripts/", "projects/", "history.jsonl"],
                 heavySubpathTier: .batched,
                 protectFromDeleteSubpaths: [
                     // Append-only logs / version history / backups whose
