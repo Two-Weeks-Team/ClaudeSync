@@ -11,6 +11,16 @@ public enum SyncTarget: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// Targets actually watched + synced and shown in the UI. v1.3.2 drops
+    /// `.projects` (~/Documents/GitHub): git is the source of truth for
+    /// projects, so each Mac clones/pulls independently rather than
+    /// rsync-mirroring working trees. `.projects` stays in `allCases` (it has
+    /// a valid spec and is referenced by tests) but is excluded from the
+    /// active set so it neither runs nor appears as a dangling "—" row.
+    public static let active: [SyncTarget] = [
+        .claudeConfig, .claudeAppSupport, .codexConfig,
+    ]
+
     public var displayName: String {
         switch self {
         case .claudeConfig:     return "Claude Code"
@@ -102,6 +112,17 @@ public extension SyncTarget {
                     // — its mtime is pure local state and propagating it would
                     // synchronize cleanup cadence across both Macs.
                     ".last-cleanup",
+                    // v1.3.2: per-machine build artifacts. A skill's Python
+                    // virtualenv (e.g. skills/sisyphus-memory/.venv, ~400MB of
+                    // thousands of files) bloated every ~/.claude sync and slowed
+                    // the receiver's file-list build enough to compound the
+                    // SYNC-DEADLOCK timeouts. virtualenvs / node_modules /
+                    // bytecode caches are machine-specific (absolute paths,
+                    // compiled binaries) and not portable — each Mac rebuilds
+                    // its own. Skill SOURCE (.py/.md/.sh) still syncs normally.
+                    ".venv/", "venv/",
+                    "node_modules/",
+                    "__pycache__/", "*.pyc",
                 ],
                 defaultTier: .realtime,
                 heavySubpaths: ["sessions/", "transcripts/"],

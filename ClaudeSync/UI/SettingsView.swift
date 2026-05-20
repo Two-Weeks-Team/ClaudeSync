@@ -117,7 +117,7 @@ struct SettingsView: View {
     private var excludesTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Target", selection: $selectedTarget) {
-                ForEach(SyncTarget.allCases) { t in
+                ForEach(SyncTarget.active) { t in
                     Text(t.displayName).tag(t)
                 }
             }
