@@ -29,6 +29,10 @@ public final class SyncCoordinator {
     public let batchAccumulator: BatchAccumulator
     public let batchStream: AsyncStream<BatchAccumulator.Output>
     public let conflictResolver: ConflictResolver
+    /// SAFETY-001: owns the daily quarantine sweep. Started in `start()`,
+    /// cancelled in `stop()`. Optional so unit tests that construct a
+    /// minimal coordinator can pass nil and skip the side effect.
+    public let trashJanitor: TrashJanitor?
 
     private var watcherTask: Task<Void, Never>?
     private var batchTask: Task<Void, Never>?
@@ -39,13 +43,15 @@ public final class SyncCoordinator {
         syncActor: FileSyncActor,
         batchAccumulator: BatchAccumulator,
         batchStream: AsyncStream<BatchAccumulator.Output>,
-        conflictResolver: ConflictResolver = ConflictResolver()
+        conflictResolver: ConflictResolver = ConflictResolver(),
+        trashJanitor: TrashJanitor? = TrashJanitor()
     ) {
         self.watcher = watcher
         self.syncActor = syncActor
         self.batchAccumulator = batchAccumulator
         self.batchStream = batchStream
         self.conflictResolver = conflictResolver
+        self.trashJanitor = trashJanitor
     }
 
     // MARK: - Lifecycle
@@ -53,6 +59,13 @@ public final class SyncCoordinator {
     public func start(targets: Set<SyncTarget> = [.claudeConfig, .claudeAppSupport, .codexConfig]) async {
         await watcher.startWatching(targets: targets)
         state = .watching
+
+        // SAFETY-001: start the daily quarantine sweep. Detached so it
+        // never blocks the watcher pumps below, and self-cancelling on
+        // stop().
+        if let janitor = trashJanitor {
+            await janitor.start()
+        }
 
         // Pump 1: file-watcher batches → either enqueue immediately (real-time)
         // or hand to the accumulator (batched). On-demand tier is dropped
@@ -98,6 +111,9 @@ public final class SyncCoordinator {
         batchTask = nil
         resultsTask?.cancel()
         resultsTask = nil
+        if let janitor = trashJanitor {
+            await janitor.stop()
+        }
         await watcher.stopAll()
         await syncActor.close()
         state = .idle

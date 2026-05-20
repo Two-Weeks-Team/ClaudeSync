@@ -130,12 +130,19 @@ final class AppEnvironment {
         self.syncActor = syncActor
         self.batchAccumulator = batchAccumulator
         self.conflictResolver = resolver
+        // SAFETY-001: construct the TrashJanitor with the user-configured
+        // retention window from preferences.json (default 30, clamped ≥1
+        // in Preferences.init). Without this, the preference field is
+        // dead config — the coordinator's default `TrashJanitor()` would
+        // always hardcode 30 days regardless of what the user set.
+        let janitor = TrashJanitor(retentionDays: initialPrefs.trashRetentionDays)
         self.coordinator = SyncCoordinator(
             watcher: watcher,
             syncActor: syncActor,
             batchAccumulator: batchAccumulator,
             batchStream: batchStream,
-            conflictResolver: resolver
+            conflictResolver: resolver,
+            trashJanitor: janitor
         )
         self.sshKeys = SSHKeyManager(homeDirectoryURL: homeDirectory)
         let identity = PairingManager.LocalIdentity(
