@@ -16,10 +16,16 @@ public actor FileSyncActor {
         /// negotiation phase. Without this ceiling, ``execute(job:)`` would
         /// await ``ProcessRunner/run(timeout:)`` forever and leak its
         /// ``runningIDs`` slot, eventually saturating ``maxConcurrent`` and
-        /// stalling the entire engine (v1.2.14 regression). Default 90s
-        /// covers the realistic worst-case sync (full ~/.claude with 60+
-        /// path includes) on a LAN. Tests can shrink this without affecting
-        /// behavior.
+        /// stalling the entire engine (v1.2.14 regression).
+        ///
+        /// v1.3.1 (SYNC-DEADLOCK): raised 90s → 240s. This is the *outer*
+        /// hard ceiling and must stay safely above rsync's own `--timeout`
+        /// (now 120s, see RsyncCommandBuilder) so the inner data-idle timeout
+        /// fires first with a clean `poll: timeout` instead of us SIGTERM-ing
+        /// a job that is merely slow. v1.3's protect-filter + `--backup-dir`
+        /// receiver work pushed full-tree syncs past the old 90s ceiling
+        /// under bidirectional load, producing a permanent retry storm.
+        /// Tests can shrink this without affecting behavior.
         public let perJobTimeout: Duration
         /// Maximum number of file paths an individual ``SyncJob`` (and thus
         /// a single rsync invocation) may carry. v1.2.15 fixed the leak that
@@ -36,7 +42,7 @@ public actor FileSyncActor {
 
         public init(maxConcurrent: Int = 3,
                     builder: RsyncCommandBuilder = RsyncCommandBuilder(),
-                    perJobTimeout: Duration = .seconds(90),
+                    perJobTimeout: Duration = .seconds(240),
                     maxPathsPerJob: Int = 16) {
             self.maxConcurrent = maxConcurrent
             self.builder = builder

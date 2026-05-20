@@ -55,6 +55,7 @@
 		8E6EEE325ECCA2A5FE229187 /* PeerChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8420E095ECCB029897147338 /* PeerChannelTests.swift */; };
 		95D40F596A6872EA210F02F1 /* SSHConnectivityChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D40097EDC36A59BEE98010B /* SSHConnectivityChecker.swift */; };
 		99D03AAB89CE15C57F65CE8F /* PreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A72329E7D5984988D4D909 /* PreflightTests.swift */; };
+		9C69D151B4DD46E0CAE3A3E6 /* ProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D21725CE46B7235C34F4E5B /* ProcessRunnerTests.swift */; };
 		A0460B7BAB325208C53E8EDC /* SyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA0918C59393731747B824D /* SyncCoordinatorTests.swift */; };
 		A89B611AD1B185B4BD6167F8 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 634A274E78BF016F31B1D3D0 /* Logger.swift */; };
 		AA15FA96F509FE4309BC8351 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 513895AA1EA1A107B4F0095C /* SettingsView.swift */; };
@@ -121,6 +122,7 @@
 		428ACB158E1E4695B0575210 /* ClaudeSyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSyncApp.swift; sourceTree = "<group>"; };
 		4785886D091FF351E63ED337 /* NWConnectionPeerChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWConnectionPeerChannel.swift; sourceTree = "<group>"; };
 		491841234764329A7B8ED26B /* SystemSettingsLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSettingsLink.swift; sourceTree = "<group>"; };
+		4D21725CE46B7235C34F4E5B /* ProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunnerTests.swift; sourceTree = "<group>"; };
 		513895AA1EA1A107B4F0095C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5435A7DAF236C2F89C881705 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		55518792E8AF671CD3613D86 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -239,6 +241,13 @@
 			path = Coordinator;
 			sourceTree = "<group>";
 		};
+		66405500C56E9081D8596A8A /* PackageSync */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = PackageSync;
+			sourceTree = "<group>";
+		};
 		AB4DC395C4E5A224EFDDCA8A /* ClaudeSyncTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -259,6 +268,7 @@
 				8FB06AF76410178B28249F13 /* PeerDiscoveryTests.swift */,
 				014E0BEAB16D1EAC03A9CAD2 /* PreferencesTests.swift */,
 				25A72329E7D5984988D4D909 /* PreflightTests.swift */,
+				4D21725CE46B7235C34F4E5B /* ProcessRunnerTests.swift */,
 				6DC91681C33A2C6E557B6D6F /* RsyncCommandBuilderTests.swift */,
 				2C6DC1F1BED2C847D1D293D4 /* SmokeTests.swift */,
 				1816DB0502F6CCFA55FF4DA7 /* SSHKeyManagerTests.swift */,
@@ -310,6 +320,7 @@
 				5EF142104F03A8BE9880A7C5 /* Coordinator */,
 				D3E67FFA6FCCA9A663F0AD37 /* Discovery */,
 				19001F75DF08CE649878A30A /* FileWatcher */,
+				66405500C56E9081D8596A8A /* PackageSync */,
 				BC57C013026BE6CF59E35513 /* Pairing */,
 				0BBAD197DDF8288AF37C19F8 /* Persistence */,
 				E75F031EA3451B3C6339F8C6 /* Resources */,
@@ -433,6 +444,7 @@
 				};
 			};
 			buildConfigurationList = 0BD5997B142B7A2D1378D933 /* Build configuration list for PBXProject "ClaudeSync" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -442,7 +454,6 @@
 			mainGroup = E4F3D9956CCD8CB9CF79CA69;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = DD6E61272FB9CF3999F76E87 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -485,6 +496,7 @@
 				D69B005326234C095A7B3018 /* PeerDiscoveryTests.swift in Sources */,
 				C1C383DECEFF586BCAD29CDE /* PreferencesTests.swift in Sources */,
 				99D03AAB89CE15C57F65CE8F /* PreflightTests.swift in Sources */,
+				9C69D151B4DD46E0CAE3A3E6 /* ProcessRunnerTests.swift in Sources */,
 				EBAFFE779D3A1DCA4BA3821B /* RsyncCommandBuilderTests.swift in Sources */,
 				025F977E66A0EAD4053694A4 /* SSHKeyManagerTests.swift in Sources */,
 				DCAC9A1B1A8A25C7B85C56CA /* SmokeTests.swift in Sources */,
@@ -656,7 +668,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 23;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -672,7 +684,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.2.17;
+				MARKETING_VERSION = 1.3.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -743,7 +755,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 23;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -765,7 +777,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.2.17;
+				MARKETING_VERSION = 1.3.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
