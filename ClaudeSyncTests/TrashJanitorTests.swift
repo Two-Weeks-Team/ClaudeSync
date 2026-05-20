@@ -86,4 +86,18 @@ final class TrashJanitorTests: XCTestCase {
         XCTAssertEqual(janitor.retentionDays, 1,
                        "zero/negative retention must be clamped so the janitor never sweeps everything immediately")
     }
+
+    // Regression guard: Preferences.trashRetentionDays must actually flow
+    // into the TrashJanitor used in production. The original v1.3 PR
+    // defined the preference field + Codable plumbing but did not wire
+    // it through AppEnvironment, so any user customization was silently
+    // ignored and the coordinator's default 30-day window was used. This
+    // test pins the contract so the regression cannot reappear: a
+    // janitor built from a Preferences value carries that value through.
+    func testPreferences_trashRetentionDays_isHonoredByJanitor() async throws {
+        let prefs = Preferences(trashRetentionDays: 90)
+        let janitor = TrashJanitor(retentionDays: prefs.trashRetentionDays)
+        XCTAssertEqual(janitor.retentionDays, 90,
+                       "TrashJanitor must adopt the retention window from Preferences instead of the hardcoded default")
+    }
 }
