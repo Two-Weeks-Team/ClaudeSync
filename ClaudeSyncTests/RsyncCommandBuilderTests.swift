@@ -18,7 +18,10 @@ final class RsyncCommandBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("--update"))
         XCTAssertTrue(args.contains("--itemize-changes"))
         XCTAssertTrue(args.contains("--partial"))
-        XCTAssertTrue(args.contains("--timeout=30"))
+        // v1.3.1 (SYNC-DEADLOCK): data-idle timeout raised 30s → 120s so the
+        // receiver's file-list build for a large tree doesn't trip a false
+        // `poll: timeout` under load.
+        XCTAssertTrue(args.contains("--timeout=120"))
     }
 
     func testGNUOnlyFlags_areOmittedForSystemRsync() {

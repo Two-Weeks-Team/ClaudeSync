@@ -93,38 +93,78 @@ public actor ProcessRunner {
     }
 
     /// Internal worker — same shape as the pre-v1.2.15 ``run()`` body.
+    ///
+    /// v1.3.1 (SYNC-DEADLOCK): stdout and stderr are drained **concurrently
+    /// while the child runs**, not lazily in `terminationHandler`. The old
+    /// implementation only called `readToEnd()` after the child exited; a
+    /// child that wrote more than the OS pipe buffer (~64KB on macOS) to
+    /// stdout blocked on `write()` and never exited, so the handler never
+    /// fired — a deadlock. rsync surfaced it as `poll: timeout` (exit 255)
+    /// once its own `--timeout` elapsed, which is exactly what we saw on
+    /// large `--itemize-changes` changesets after the v1.3 sync. Draining via
+    /// a blocking `readToEnd()` on a background queue keeps the pipe empty so
+    /// the child can always make progress; the read returns once the child
+    /// closes its write end at exit.
     private func runUntilExit() async throws -> Output {
         let (process, stdoutPipe, stderrPipe) = try makeProcess()
         currentProcess = process
 
+        let outHandle = stdoutPipe.fileHandleForReading
+        let errHandle = stderrPipe.fileHandleForReading
+
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Output, Error>) in
-                process.terminationHandler = { proc in
-                    let stdoutData = (try? stdoutPipe.fileHandleForReading.readToEnd()) ?? Data()
-                    let stderrData = (try? stderrPipe.fileHandleForReading.readToEnd()) ?? Data()
-                    let exitCode = proc.terminationStatus
-                    let output = Output(exitCode: exitCode, stdout: stdoutData, stderr: stderrData)
+            do {
+                try process.run()
+            } catch {
+                throw RunnerError.launchFailed(error.localizedDescription)
+            }
 
-                    if exitCode == 0 {
-                        continuation.resume(returning: output)
-                    } else if proc.terminationReason == .uncaughtSignal {
-                        continuation.resume(throwing: RunnerError.cancelled)
-                    } else {
-                        let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
-                        continuation.resume(
-                            throwing: RunnerError.nonZeroExit(code: exitCode, stderr: stderrText)
-                        )
-                    }
-                }
+            // Concurrent drains keep both pipes empty; each readToEnd resolves
+            // at EOF (child closes its write end on exit, including after a
+            // terminate() from cancel()/timeout).
+            async let stdoutData = Self.drainToEnd(outHandle)
+            async let stderrData = Self.drainToEnd(errHandle)
+            let stdoutBytes = await stdoutData
+            let stderrBytes = await stderrData
+            await Self.waitForExit(process)
 
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: RunnerError.launchFailed(error.localizedDescription))
-                }
+            let exitCode = process.terminationStatus
+            let output = Output(exitCode: exitCode, stdout: stdoutBytes, stderr: stderrBytes)
+
+            if exitCode == 0 {
+                return output
+            } else if process.terminationReason == .uncaughtSignal {
+                throw RunnerError.cancelled
+            } else {
+                let stderrText = String(data: stderrBytes, encoding: .utf8) ?? ""
+                throw RunnerError.nonZeroExit(code: exitCode, stderr: stderrText)
             }
         } onCancel: {
             Task { await self.cancel() }
+        }
+    }
+
+    /// Blocking `readToEnd()` hopped onto a background queue so the actor is
+    /// never blocked and the pipe is drained continuously. Returns whatever
+    /// was read up to EOF (empty on error).
+    private static func drainToEnd(_ handle: FileHandle) async -> Data {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Data, Never>) in
+            DispatchQueue.global(qos: .utility).async {
+                let data = (try? handle.readToEnd()) ?? Data()
+                continuation.resume(returning: data)
+            }
+        }
+    }
+
+    /// `waitUntilExit()` off the actor. By the time both pipes have hit EOF
+    /// the child has closed its write ends, so this returns almost immediately
+    /// — but we still wait so `terminationStatus` is valid.
+    private static func waitForExit(_ process: Process) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .utility).async {
+                process.waitUntilExit()
+                continuation.resume()
+            }
         }
     }
 

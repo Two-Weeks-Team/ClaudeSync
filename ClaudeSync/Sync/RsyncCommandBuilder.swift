@@ -84,7 +84,16 @@ public struct RsyncCommandBuilder: Sendable {
             "--update",
             "--itemize-changes",
             "--partial",
-            "--timeout=30",
+            // v1.3.1 (SYNC-DEADLOCK): rsync `--timeout` is a *data-idle*
+            // timeout — it fires when no bytes cross the protocol channel for
+            // N seconds. During the receiver's file-list build (walking its
+            // tree, evaluating every entry against the `--filter P` protect
+            // rules + excludes that v1.3 added) NO data flows, so a large
+            // ~/.claude tree under bidirectional load can stall well past 30s
+            // and trip `poll: timeout` → exit 255 → retry storm. Measured ~17s
+            // on a calm LAN, far more under contention; 120s gives ample
+            // headroom while still bounding a genuinely dead connection.
+            "--timeout=120",
             "-e", sshCommand(for: peer),
         ]
 
