@@ -30,13 +30,21 @@ public struct RsyncCommandBuilder: Sendable {
     /// `accept-new` TOFU behavior. Empty string disables strict mode and
     /// falls back to the v1.0.x `accept-new` semantics.
     public let knownHostsPath: String
+    /// v1.3 (SAFETY-001): when true, every push/pull is run with
+    /// `--backup --backup-dir=<absolute>/.claudesync/trash/<job-id>/` so
+    /// that files removed by `--delete` land in a quarantine instead of
+    /// being immediately unlinked. The TrashJanitor actor sweeps stale
+    /// entries on its own schedule. Disabled in some tests for output
+    /// brevity but enabled by default in production.
+    public let trashQuarantineEnabled: Bool
 
     public init(
         rsyncPath: String? = nil,
         sshKeyPath: String? = nil,
         bandwidthLimitKBps: Int = 0,
         userExtraExcludes: [SyncTarget: [String]] = [:],
-        knownHostsPath: String = ""
+        knownHostsPath: String = "",
+        trashQuarantineEnabled: Bool = true
     ) {
         let detected = rsyncPath ?? Self.detectRsyncBinary()
         self.rsyncPath = detected
@@ -45,6 +53,7 @@ public struct RsyncCommandBuilder: Sendable {
         self.bandwidthLimitKBps = max(0, bandwidthLimitKBps)
         self.userExtraExcludes = userExtraExcludes
         self.knownHostsPath = knownHostsPath
+        self.trashQuarantineEnabled = trashQuarantineEnabled
     }
 
     /// Default `~/.claudesync/ssh/id_claudesync` path. Pulled into a static so
@@ -88,6 +97,26 @@ public struct RsyncCommandBuilder: Sendable {
         // User-tunable bandwidth cap (rsync 3 + openrsync both honor --bwlimit).
         if bandwidthLimitKBps > 0 {
             args += ["--bwlimit=\(bandwidthLimitKBps)"]
+        }
+
+        // SAFETY-001: rsync evaluates filter rules first-match-wins, so emit
+        // the per-target protect rules BEFORE `--include`/`--exclude` block.
+        // `P <subpath>***` keeps files under the subpath safe from --delete
+        // while still allowing additions/modifications to flow through. The
+        // `***` glob covers the directory itself + every descendant file
+        // and directory (without it, only immediate children are matched).
+        for sub in job.target.spec.protectFromDeleteSubpaths {
+            let normalized = sub.hasSuffix("/") ? sub : sub + "/"
+            args += ["--filter", "P \(normalized)***"]
+        }
+
+        // SAFETY-001: route every deletion through a quarantine directory
+        // on the receiving side, so a mass-delete event (rm -rf, mtime
+        // skew, propagated cleanup) is recoverable for the retention
+        // window. Path is absolute because rsync does not shell-expand
+        // backup-dir on the remote.
+        if trashQuarantineEnabled, let trashDir = Self.trashDir(for: job, peer: peer) {
+            args += ["--backup", "--backup-dir=\(trashDir)"]
         }
 
         // rsync evaluates filter rules **first match wins**. v1.0.1
@@ -201,5 +230,36 @@ public struct RsyncCommandBuilder: Sendable {
         let baseSlashed = base.hasSuffix("/") ? base : base + "/"
         guard absolute.hasPrefix(baseSlashed) else { return nil }
         return String(absolute.dropFirst(baseSlashed.count))
+    }
+
+    /// SAFETY-001: absolute trash directory on the **receiving** Mac, one
+    /// fresh bucket per job. On push, the receiver is the peer Mac; we
+    /// extract its username from `peer.sshAddress` (always `user@host` per
+    /// the SSH transport contract) and assemble `/Users/<user>/.claudesync/
+    /// trash/<job-id>/`. On pull, the receiver is local. Returns nil when
+    /// the address can't be parsed — caller skips the backup flags rather
+    /// than emitting a malformed argument.
+    static func trashDir(for job: SyncJob,
+                         peer: PeerEndpoint) -> String? {
+        let bucket = job.id.uuidString
+        switch job.direction {
+        case .push:
+            // SSH transport contract is `user@host`. A bare `host` (no @)
+            // has no user we can root the trash under, so skip rather
+            // than write to `/Users//.claudesync/...` (which would either
+            // fail or land in the wrong place).
+            guard peer.sshAddress.contains("@"),
+                  let userPart = peer.sshAddress.split(separator: "@").first,
+                  !userPart.isEmpty else {
+                return nil
+            }
+            // macOS hosts always root home dirs at /Users/<user>; this
+            // app is macOS-only so the assumption is safe.
+            return "/Users/\(userPart)/.claudesync/trash/\(bucket)/"
+        case .pull:
+            return URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent(".claudesync/trash/\(bucket)/")
+                .path + "/"
+        }
     }
 }

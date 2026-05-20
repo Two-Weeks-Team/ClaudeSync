@@ -46,12 +46,21 @@ public struct SyncTargetSpec: Sendable {
     public let heavySubpaths: [String]
     public let heavySubpathTier: SyncTier
     public let supportsProjectIgnoreFile: Bool
+    /// v1.3 (SAFETY-001): subpath prefixes (relative to basePath) whose
+    /// contents are protected from `--delete` propagation. Used so that
+    /// when one Mac's Claude Code runs its periodic cleanup of
+    /// `file-history/`, `sessions/`, `backups/` etc., the resulting
+    /// unlinks don't propagate to the peer Mac and wipe its history.
+    /// Implemented via rsync `--filter='P <subpath>***'` rules, which
+    /// both openrsync (macOS 15+) and GNU rsync 3.x honor.
+    public let protectFromDeleteSubpaths: [String]
 
     public init(
         target: SyncTarget, basePath: String, watchPaths: [String],
         excludePatterns: [String], defaultTier: SyncTier,
         heavySubpaths: [String] = [], heavySubpathTier: SyncTier = .batched,
-        supportsProjectIgnoreFile: Bool = false
+        supportsProjectIgnoreFile: Bool = false,
+        protectFromDeleteSubpaths: [String] = []
     ) {
         self.target = target
         self.basePath = basePath
@@ -61,6 +70,7 @@ public struct SyncTargetSpec: Sendable {
         self.heavySubpaths = heavySubpaths
         self.heavySubpathTier = heavySubpathTier
         self.supportsProjectIgnoreFile = supportsProjectIgnoreFile
+        self.protectFromDeleteSubpaths = protectFromDeleteSubpaths
     }
 
     /// Resolve a relative path within this target into the appropriate tier.
@@ -88,10 +98,28 @@ public extension SyncTarget {
                     "*.lock", "*.tmp",
                     "credentials.json",
                     "oauth_token*",
+                    // SAFETY-001: never propagate Claude Code's cleanup marker
+                    // — its mtime is pure local state and propagating it would
+                    // synchronize cleanup cadence across both Macs.
+                    ".last-cleanup",
                 ],
                 defaultTier: .realtime,
                 heavySubpaths: ["sessions/", "transcripts/"],
-                heavySubpathTier: .batched
+                heavySubpathTier: .batched,
+                protectFromDeleteSubpaths: [
+                    // Append-only logs / version history / backups whose
+                    // entries Claude Code prunes on its own (~7-30 day
+                    // retention). Each Mac runs its own cleanup; if one
+                    // Mac's cleanup unlinks a file, that unlink must NOT
+                    // propagate to the peer — the peer's retention window
+                    // is independent.
+                    "sessions/",
+                    "transcripts/",
+                    "projects/",
+                    "file-history/",
+                    "backups/",
+                    "shell-snapshots/",
+                ]
             )
         case .claudeAppSupport:
             return SyncTargetSpec(

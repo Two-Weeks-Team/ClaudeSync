@@ -29,26 +29,34 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Defaults to true — set false to keep the v1.1 manual-confirm flow.
     public var autoPairSameAppleID: Bool
 
+    /// v1.3 (SAFETY-001): retention window for the rsync `--backup-dir`
+    /// quarantine at `~/.claudesync/trash/`. Files removed by `--delete`
+    /// land there and are kept this many days before TrashJanitor sweeps
+    /// them. Default 30 days. Minimum 1.
+    public var trashRetentionDays: Int
+
     public init(
         bandwidthLimitKBps: Int = 0,
         extraExcludes: [String: [String]] = [:],
         launchAtLogin: Bool = false,
         pairedPeer: PairedPeerRecord? = nil,
-        autoPairSameAppleID: Bool = true
+        autoPairSameAppleID: Bool = true,
+        trashRetentionDays: Int = 30
     ) {
         self.bandwidthLimitKBps = bandwidthLimitKBps
         self.extraExcludes = extraExcludes
         self.launchAtLogin = launchAtLogin
         self.pairedPeer = pairedPeer
         self.autoPairSameAppleID = autoPairSameAppleID
+        self.trashRetentionDays = max(1, trashRetentionDays)
     }
 
     // Codable backwards compatibility — older preferences.json files don't
-    // have `pairedPeer` / `autoPairSameAppleID`. Decode missing fields
-    // with v1.2 defaults instead of failing.
+    // have `pairedPeer` / `autoPairSameAppleID` / `trashRetentionDays`.
+    // Decode missing fields with current defaults instead of failing.
     private enum CodingKeys: String, CodingKey {
         case bandwidthLimitKBps, extraExcludes, launchAtLogin, pairedPeer,
-             autoPairSameAppleID
+             autoPairSameAppleID, trashRetentionDays
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -59,6 +67,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.pairedPeer = try c.decodeIfPresent(PairedPeerRecord.self, forKey: .pairedPeer)
         self.autoPairSameAppleID = try c.decodeIfPresent(Bool.self,
                                                         forKey: .autoPairSameAppleID) ?? true
+        let raw = try c.decodeIfPresent(Int.self, forKey: .trashRetentionDays) ?? 30
+        self.trashRetentionDays = max(1, raw)
     }
 }
 
