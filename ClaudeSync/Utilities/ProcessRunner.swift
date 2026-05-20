@@ -94,17 +94,22 @@ public actor ProcessRunner {
 
     /// Internal worker — same shape as the pre-v1.2.15 ``run()`` body.
     ///
-    /// v1.3.1 (SYNC-DEADLOCK): stdout and stderr are drained **concurrently
-    /// while the child runs**, not lazily in `terminationHandler`. The old
-    /// implementation only called `readToEnd()` after the child exited; a
-    /// child that wrote more than the OS pipe buffer (~64KB on macOS) to
-    /// stdout blocked on `write()` and never exited, so the handler never
-    /// fired — a deadlock. rsync surfaced it as `poll: timeout` (exit 255)
-    /// once its own `--timeout` elapsed, which is exactly what we saw on
-    /// large `--itemize-changes` changesets after the v1.3 sync. Draining via
-    /// a blocking `readToEnd()` on a background queue keeps the pipe empty so
-    /// the child can always make progress; the read returns once the child
-    /// closes its write end at exit.
+    /// v1.3.1 (SYNC-DEADLOCK): stdout and stderr are drained **as data
+    /// arrives** via `readabilityHandler`, not lazily in `terminationHandler`.
+    /// The old implementation only called `readToEnd()` after the child
+    /// exited; a child that wrote more than the OS pipe buffer (~64KB on
+    /// macOS) to stdout blocked on `write()` and never exited, so the handler
+    /// never fired — a deadlock. rsync surfaced it as `poll: timeout`
+    /// (exit 255) once its own `--timeout` elapsed, exactly what we saw on
+    /// large `--itemize-changes` changesets after the v1.3 sync.
+    ///
+    /// The drain is event-driven (dispatch-source callbacks) rather than a
+    /// blocking `readToEnd()` on a GCD worker: blocking three GCD threads per
+    /// invocation (2 reads + waitUntilExit) starved the `.utility` thread pool
+    /// on the few-core CI runner and hung the whole suite. `readabilityHandler`
+    /// holds no thread. This mirrors the long-proven ``runStreaming`` path.
+    /// The continuation resolves only once both pipes hit EOF *and* the process
+    /// has terminated, so all output is captured with no read/exit race.
     private func runUntilExit() async throws -> Output {
         let (process, stdoutPipe, stderrPipe) = try makeProcess()
         currentProcess = process
@@ -113,58 +118,51 @@ public actor ProcessRunner {
         let errHandle = stderrPipe.fileHandleForReading
 
         return try await withTaskCancellationHandler {
-            do {
-                try process.run()
-            } catch {
-                throw RunnerError.launchFailed(error.localizedDescription)
-            }
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Output, Error>) in
+                let coordinator = ExitCoordinator { exitCode, bySignal, stdout, stderr in
+                    if exitCode == 0 {
+                        continuation.resume(returning: Output(exitCode: exitCode, stdout: stdout, stderr: stderr))
+                    } else if bySignal {
+                        continuation.resume(throwing: RunnerError.cancelled)
+                    } else {
+                        let stderrText = String(data: stderr, encoding: .utf8) ?? ""
+                        continuation.resume(throwing: RunnerError.nonZeroExit(code: exitCode, stderr: stderrText))
+                    }
+                }
 
-            // Concurrent drains keep both pipes empty; each readToEnd resolves
-            // at EOF (child closes its write end on exit, including after a
-            // terminate() from cancel()/timeout).
-            async let stdoutData = Self.drainToEnd(outHandle)
-            async let stderrData = Self.drainToEnd(errHandle)
-            let stdoutBytes = await stdoutData
-            let stderrBytes = await stderrData
-            await Self.waitForExit(process)
+                outHandle.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    if data.isEmpty {
+                        handle.readabilityHandler = nil
+                        coordinator.markStdoutEOF()
+                    } else {
+                        coordinator.appendStdout(data)
+                    }
+                }
+                errHandle.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    if data.isEmpty {
+                        handle.readabilityHandler = nil
+                        coordinator.markStderrEOF()
+                    } else {
+                        coordinator.appendStderr(data)
+                    }
+                }
+                process.terminationHandler = { proc in
+                    coordinator.markExited(code: proc.terminationStatus,
+                                           bySignal: proc.terminationReason == .uncaughtSignal)
+                }
 
-            let exitCode = process.terminationStatus
-            let output = Output(exitCode: exitCode, stdout: stdoutBytes, stderr: stderrBytes)
-
-            if exitCode == 0 {
-                return output
-            } else if process.terminationReason == .uncaughtSignal {
-                throw RunnerError.cancelled
-            } else {
-                let stderrText = String(data: stderrBytes, encoding: .utf8) ?? ""
-                throw RunnerError.nonZeroExit(code: exitCode, stderr: stderrText)
+                do {
+                    try process.run()
+                } catch {
+                    outHandle.readabilityHandler = nil
+                    errHandle.readabilityHandler = nil
+                    continuation.resume(throwing: RunnerError.launchFailed(error.localizedDescription))
+                }
             }
         } onCancel: {
             Task { await self.cancel() }
-        }
-    }
-
-    /// Blocking `readToEnd()` hopped onto a background queue so the actor is
-    /// never blocked and the pipe is drained continuously. Returns whatever
-    /// was read up to EOF (empty on error).
-    private static func drainToEnd(_ handle: FileHandle) async -> Data {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Data, Never>) in
-            DispatchQueue.global(qos: .utility).async {
-                let data = (try? handle.readToEnd()) ?? Data()
-                continuation.resume(returning: data)
-            }
-        }
-    }
-
-    /// `waitUntilExit()` off the actor. By the time both pipes have hit EOF
-    /// the child has closed its write ends, so this returns almost immediately
-    /// — but we still wait so `terminationStatus` is valid.
-    private static func waitForExit(_ process: Process) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .utility).async {
-                process.waitUntilExit()
-                continuation.resume()
-            }
         }
     }
 
@@ -243,6 +241,49 @@ public actor ProcessRunner {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         return (process, stdoutPipe, stderrPipe)
+    }
+}
+
+/// Collects stdout/stderr and the exit status from independent dispatch-source
+/// callbacks (two `readabilityHandler`s + one `terminationHandler`, each on its
+/// own queue) and fires `onComplete` exactly once when all three have reported:
+/// both pipes at EOF and the process terminated. This ordering guarantees every
+/// byte the child wrote is captured before the exit code is reported — no
+/// read-vs-exit race — without blocking any thread. (v1.3.1, SYNC-DEADLOCK.)
+private final class ExitCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stdout = Data()
+    private var stderr = Data()
+    private var stdoutEOF = false
+    private var stderrEOF = false
+    private var exited = false
+    private var exitCode: Int32 = 0
+    private var bySignal = false
+    private var fired = false
+    private let onComplete: (Int32, Bool, Data, Data) -> Void
+
+    init(onComplete: @escaping (Int32, Bool, Data, Data) -> Void) {
+        self.onComplete = onComplete
+    }
+
+    func appendStdout(_ d: Data) { lock.lock(); stdout.append(d); lock.unlock() }
+    func appendStderr(_ d: Data) { lock.lock(); stderr.append(d); lock.unlock() }
+    func markStdoutEOF() { fireIfReady { $0.stdoutEOF = true } }
+    func markStderrEOF() { fireIfReady { $0.stderrEOF = true } }
+    func markExited(code: Int32, bySignal: Bool) {
+        fireIfReady { $0.exited = true; $0.exitCode = code; $0.bySignal = bySignal }
+    }
+
+    /// Apply `mutate` under the lock, then fire `onComplete` (outside the lock)
+    /// the first time all three conditions hold.
+    private func fireIfReady(_ mutate: (ExitCoordinator) -> Void) {
+        lock.lock()
+        mutate(self)
+        let shouldFire = !fired && stdoutEOF && stderrEOF && exited
+        if shouldFire { fired = true }
+        let out = stdout, err = stderr, code = exitCode, sig = bySignal
+        lock.unlock()
+        if shouldFire { onComplete(code, sig, out, err) }
     }
 }
 
